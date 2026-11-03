@@ -40,7 +40,7 @@ class Boss:
                 self.y = ny; moved = True
             if not moved:
                 self.phase = 'idle'
-        elif 40 < dist < 400:
+        elif dist < 400:  # <--- ИСПРАВЛЕНО ЗДЕСЬ (убран баг "слепой зоны")
             dx, dy = dx/dist, dy/dist
             s = self.speed * (dt/16.67)
             if world.is_walkable_rect(self.x + dx*s, self.y, self.w, self.h):
