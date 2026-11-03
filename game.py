@@ -1,4 +1,4 @@
-import pygame, random
+import pygame, random, asyncio
 from settings import *
 from data.story import *
 from world.map import World
@@ -17,7 +17,6 @@ class Game:
     TOTAL_CRYSTALS = 3
 
     def __init__(self):
-        pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Хроники Эльдории")
         self.clock = pygame.time.Clock()
@@ -321,10 +320,11 @@ class Game:
                                    True, (220, 220, 220)), (WIDTH // 2 - 200, 350))
 
     # ---------- цикл ----------
-    def run(self):
+    async def run(self):  # <-- ОБЯЗАТЕЛЬНО добавить async перед def
         while self.running:
             dt = self.clock.tick(FPS)
             self.handle_events()
             self.update(dt)
             self.draw()
+            await asyncio.sleep(0)
         pygame.quit()
