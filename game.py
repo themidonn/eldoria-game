@@ -13,6 +13,7 @@ from ui.hud import HUD
 from ui.dialog import Dialog
 from ui.floating_text import FloatingText
 from ui.minimap import MiniMap
+from ui.particles import ParticleManager
 
 class Game:
     TOTAL_CRYSTALS = 3
@@ -39,6 +40,7 @@ class Game:
     def _reset(self):
         self.world = World()
         self.minimap = MiniMap(self.world)
+        self.particles = ParticleManager()
         self.player = Player(30*TILE + 7, 38*TILE + 7)
         self.camera = Camera()
         self.dialog = Dialog()
@@ -184,16 +186,20 @@ class Game:
             e.update(self.player, self.world, dt)
             if hb and hb.colliderect(e.rect):
                 e.take_damage(PLAYER_ATTACK_DAMAGE,
-                              self.player.x + self.player.w/2,
-                              self.player.y + self.player.h/2)
+                              self.player.x + self.player.w / 2,
+                              self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
                 hb = None
+                self.camera.add_shake(2)  # <-- Легкая тряска при ударе
             if not e.dead and e.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
+                    self.camera.add_shake(5)  # <-- Сильная тряска при уроне
                     self.floating_texts.append(FloatingText(
                         self.player.x + self.player.w / 2, self.player.y - 10,
                         "-1 HP", (255, 100, 100)
                     ))
+            if e.dead:
+                self.particles.spawn_burst(e.x + e.w / 2, e.y + e.h / 2, COLOR_SLIME)  # <-- Взрыв частиц
 
         # босс
         if self.boss and not self.boss.dead:
@@ -204,8 +210,10 @@ class Game:
                                       self.player.x + self.player.w / 2,
                                       self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
+                self.camera.add_shake(3)
             if not self.boss.dead and self.boss.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
+                    self.camera.add_shake(5)  # <-- ДОБАВЛЕНО: Тряска, когда босс бьет игрока
                     self.floating_texts.append(FloatingText(
                         self.player.x + self.player.w / 2, self.player.y - 10,
                         "-1 HP", (255, 100, 100)
@@ -214,12 +222,20 @@ class Game:
         # смерть босса — с задержкой перед экраном победы
         if self.boss and self.boss.dead and self.boss_spawned:
             if self.win_delay == 0:
+                # Взрыв из 40 красных частиц
+                self.particles.spawn_burst(
+                    self.boss.x + self.boss.w / 2,
+                    self.boss.y + self.boss.h / 2,
+                    COLOR_BOSS,
+                    count=40
+                )
+                self.camera.add_shake(10)  # Сильная тряска при смерти босса
                 self.floating_texts.append(FloatingText(
                     self.boss.x + self.boss.w / 2, self.boss.y - 10,
                     "МОРВЕЙН ПАЛ!", (255, 220, 100), duration=1500
                 ))
                 self.win_delay = 1
-            else:  # ← Заменили elif на else для читаемости
+            else:
                 self.win_delay += dt
                 if self.win_delay >= 1500:
                     self.state = 'win'
@@ -228,6 +244,7 @@ class Game:
                 and self.win_delay == 0):
             self.state = 'lose'
 
+        self.particles.update(dt)
         self.camera.follow(self.player.x + self.player.w/2,
                            self.player.y + self.player.h/2,
                            self.world.w, self.world.h)
@@ -259,6 +276,9 @@ class Game:
                 e.draw(self.screen, self.camera)
 
         self.dialog.draw(self.screen)
+
+        # частицы
+        self.particles.draw(self.screen, self.camera)
 
         # всплывающие тексты
         for ft in self.floating_texts:
