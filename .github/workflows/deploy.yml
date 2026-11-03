@@ -12,6 +12,15 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
+    # ВОТ ЭТА СТРОКА РЕШАЕТ ОШИБКУ 404
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    env:
+      PYTHONUTF8: 1
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,6 +37,9 @@ jobs:
 
       - name: Build with Pygbag
         run: python -m pygbag --build .
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
