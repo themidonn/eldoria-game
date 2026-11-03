@@ -1,4 +1,4 @@
-import pygame, random, asyncio
+import pygame, random, asyncio, math
 from settings import *
 from data.story import *
 from world.map import World
@@ -15,6 +15,7 @@ from ui.floating_text import FloatingText
 from ui.minimap import MiniMap
 from ui.particles import ParticleManager
 
+
 class Game:
     TOTAL_CRYSTALS = 3
 
@@ -30,18 +31,24 @@ class Game:
         self.font_win_big = pygame.font.SysFont('arial', 64, bold=True)
         self.font_win_small = pygame.font.SysFont('arial', 26)
         self.font_hint_banner = pygame.font.SysFont('arial', 18, bold=True)  # баннер «Замок открыт»
+
         # ── оверлеи (кэш) ──
         self.overlay_black = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         self.overlay_black.fill((0, 0, 0, 180))
         self.overlay_red = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         self.overlay_red.fill((40, 0, 0, 180))
+
+        # НОВОЕ: Красная рамка для низкого здоровья (Vignette)
+        self.vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        pygame.draw.rect(self.vignette, (255, 0, 0), (0, 0, WIDTH, HEIGHT), width=30)
+
         self._reset()  # ← последним
 
     def _reset(self):
         self.world = World()
         self.minimap = MiniMap(self.world)
         self.particles = ParticleManager()
-        self.player = Player(30*TILE + 7, 38*TILE + 7)
+        self.player = Player(30 * TILE + 7, 38 * TILE + 7)
         self.camera = Camera()
         self.dialog = Dialog()
         self.hud = HUD()
@@ -55,7 +62,7 @@ class Game:
 
     def _spawn(self):
         # Старейшина
-        self.npcs.append(NPC(28*TILE, 38*TILE, "Старейшина"))
+        self.npcs.append(NPC(28 * TILE, 38 * TILE, "Старейшина"))
 
         # Кристалл 1 — лес (восток)
         self.crystals.append(Crystal(50 * TILE, 20 * TILE, "Кристалл Леса"))
@@ -64,10 +71,10 @@ class Game:
             if self.world.tiles[ty][tx] == GRASS:
                 self.enemies.append(Slime(tx * TILE, ty * TILE))
         # Кристалл 2 — озеро (юг)
-        self.crystals.append(Crystal(43*TILE, 35*TILE, "Кристалл Воды"))
+        self.crystals.append(Crystal(43 * TILE, 35 * TILE, "Кристалл Воды"))
         for dx in (-2, 2):
             for dy in (-2, 2):
-                self.enemies.append(Slime((43+dx)*TILE, (35+dy)*TILE))
+                self.enemies.append(Slime((43 + dx) * TILE, (35 + dy) * TILE))
         # Кристалл 3 — руины (запад)
         self.crystals.append(Crystal(8 * TILE, 20 * TILE, "Кристалл Руин"))
         for dx in (-3, 0, 3):
@@ -76,22 +83,22 @@ class Game:
                 self.enemies.append(Slime(tx * TILE, ty * TILE, hp=3))
 
         # Босс — ждёт за воротами
-        self.boss = Boss(7*TILE, 5*TILE)
+        self.boss = Boss(7 * TILE, 5 * TILE)
 
         # Случайные слизни
         rng = random.Random(99)
         for _ in range(15):
-            tx, ty = rng.randint(5, self.world.w-5), rng.randint(5, self.world.h-5)
-            if self.world.tiles[ty][tx] == GRASS and abs(tx-30) + abs(ty-38) > 10:
-                self.enemies.append(Slime(tx*TILE, ty*TILE))
+            tx, ty = rng.randint(5, self.world.w - 5), rng.randint(5, self.world.h - 5)
+            if self.world.tiles[ty][tx] == GRASS and abs(tx - 30) + abs(ty - 38) > 10:
+                self.enemies.append(Slime(tx * TILE, ty * TILE))
 
         # Зелья лечения (только на траве)
         potion_positions = [
-            (31, 36),   # рядом со стартом — обучающее
-            (49, 22),   # в лесу, у кристалла 1
-            (9, 22),    # в руинах, у кристалла 3
-            (7, 11),    # перед воротами замка — тактика перед боссом
-            (44, 34),   # у озера, у кристалла 2
+            (31, 36),  # рядом со стартом — обучающее
+            (49, 22),  # в лесу, у кристалла 1
+            (9, 22),  # в руинах, у кристалла 3
+            (7, 11),  # перед воротами замка — тактика перед боссом
+            (44, 34),  # у озера, у кристалла 2
         ]
         for tx, ty in potion_positions:
             if self.world.tiles[ty][tx] == GRASS:
@@ -104,10 +111,12 @@ class Game:
                 self.running = False
             elif e.type == pygame.KEYDOWN:
                 if self.state == 'title':
-                    self.state = 'playing'; continue
+                    self.state = 'playing';
+                    continue
                 if self.state in ('win', 'lose'):
                     if e.key == pygame.K_r:
-                        self._reset(); self.state = 'playing'
+                        self._reset();
+                        self.state = 'playing'
                     continue
                 if self.dialog.active:
                     if e.key in (pygame.K_SPACE, pygame.K_RETURN):
@@ -190,16 +199,22 @@ class Game:
                               self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
                 hb = None
-                self.camera.add_shake(2)  # <-- Легкая тряска при ударе
+                self.camera.add_shake(2)
+
+                # НОВОЕ: Вылетающая цифра урона над слизнем
+                self.floating_texts.append(FloatingText(
+                    e.x + e.w / 2, e.y - 10, "-1", (255, 255, 100), duration=600
+                ))
+
             if not e.dead and e.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
-                    self.camera.add_shake(5)  # <-- Сильная тряска при уроне
+                    self.camera.add_shake(5)
                     self.floating_texts.append(FloatingText(
                         self.player.x + self.player.w / 2, self.player.y - 10,
                         "-1 HP", (255, 100, 100)
                     ))
             if e.dead:
-                self.particles.spawn_burst(e.x + e.w / 2, e.y + e.h / 2, COLOR_SLIME)  # <-- Взрыв частиц
+                self.particles.spawn_burst(e.x + e.w / 2, e.y + e.h / 2, COLOR_SLIME)
 
         # босс
         if self.boss and not self.boss.dead:
@@ -211,9 +226,15 @@ class Game:
                                       self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
                 self.camera.add_shake(3)
+
+                # НОВОЕ: Вылетающая цифра урона над боссом
+                self.floating_texts.append(FloatingText(
+                    self.boss.x + self.boss.w / 2, self.boss.y - 10, "-1", (255, 255, 100), duration=600
+                ))
+
             if not self.boss.dead and self.boss.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
-                    self.camera.add_shake(5)  # <-- ДОБАВЛЕНО: Тряска, когда босс бьет игрока
+                    self.camera.add_shake(5)
                     self.floating_texts.append(FloatingText(
                         self.player.x + self.player.w / 2, self.player.y - 10,
                         "-1 HP", (255, 100, 100)
@@ -222,14 +243,13 @@ class Game:
         # смерть босса — с задержкой перед экраном победы
         if self.boss and self.boss.dead and self.boss_spawned:
             if self.win_delay == 0:
-                # Взрыв из 40 красных частиц
                 self.particles.spawn_burst(
                     self.boss.x + self.boss.w / 2,
                     self.boss.y + self.boss.h / 2,
                     COLOR_BOSS,
                     count=40
                 )
-                self.camera.add_shake(10)  # Сильная тряска при смерти босса
+                self.camera.add_shake(10)
                 self.floating_texts.append(FloatingText(
                     self.boss.x + self.boss.w / 2, self.boss.y - 10,
                     "МОРВЕЙН ПАЛ!", (255, 220, 100), duration=1500
@@ -245,8 +265,8 @@ class Game:
             self.state = 'lose'
 
         self.particles.update(dt)
-        self.camera.follow(self.player.x + self.player.w/2,
-                           self.player.y + self.player.h/2,
+        self.camera.follow(self.player.x + self.player.w / 2,
+                           self.player.y + self.player.h / 2,
                            self.world.w, self.world.h)
 
     # ---------- отрисовка ----------
@@ -302,6 +322,12 @@ class Game:
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
             self.minimap.draw(self.screen, self)
 
+        # НОВОЕ: Красная пульсирующая рамка при низком здоровье (1-2 HP)
+        if self.player.hp <= 2 and self.state == 'playing':
+            pulse = int(abs(math.sin(pygame.time.get_ticks() * 0.005)) * 100) + 50
+            self.vignette.set_alpha(pulse)
+            self.screen.blit(self.vignette, (0, 0))
+
         pygame.display.flip()
 
     def _draw_title(self):
@@ -310,9 +336,9 @@ class Game:
         t = fb.render("Хроники Эльдории", True, (240, 210, 130))
         s = fs.render("Тень над Священным Пламенем", True, (200, 200, 220))
         p = fs.render("Нажми любую клавишу", True, (255, 255, 255))
-        self.screen.blit(t, (WIDTH//2 - t.get_width()//2, 200))
-        self.screen.blit(s, (WIDTH//2 - s.get_width()//2, 280))
-        self.screen.blit(p, (WIDTH//2 - p.get_width()//2, 400))
+        self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 200))
+        self.screen.blit(s, (WIDTH // 2 - s.get_width() // 2, 280))
+        self.screen.blit(p, (WIDTH // 2 - p.get_width() // 2, 400))
         for i, line in enumerate([
             "WASD / Стрелки — движение",
             "Space — удар мечом",
@@ -320,7 +346,7 @@ class Game:
             "Собери 3 Кристалла Света, найди Старейшину, победи Морвейна",
         ]):
             t = fs.render(line, True, (180, 180, 200))
-            self.screen.blit(t, (WIDTH//2 - t.get_width()//2, 460 + i*30))
+            self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 460 + i * 30))
 
     def _overlay_win(self):
         self.screen.blit(self.overlay_black, (0, 0))
