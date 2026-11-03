@@ -46,8 +46,8 @@ class Game:
         self.floating_texts = []
         self.boss = None
         self.boss_spawned = False
+        self.win_delay = 0  # ← Перенесли инициализацию таймера СЮДА (до спавна)
         self._spawn()
-        self.win_delay = 0  # таймер задержки перед экраном победы
 
     def _spawn(self):
         # Старейшина
@@ -127,8 +127,8 @@ class Game:
                     self.boss.dead = False
                     self.boss_spawned = True
                     self.dialog.show(npc.name, ELDER_READY)
-                elif self.boss_spawned:  # ← добавлено
-                    self.dialog.show(npc.name, ELDER_WAIT)  # ← используется константа
+                elif self.boss_spawned:
+                    self.dialog.show(npc.name, ELDER_WAIT)
                 elif n > 0:
                     self.dialog.show(npc.name, ELDER_PROGRESS)
                 else:
@@ -167,7 +167,7 @@ class Game:
                         self.player.x + self.player.w / 2,
                         self.player.y - 10,
                         POTION_MSG,
-                        (100, 255, 100)          # зелёный
+                        (100, 255, 100)
                     ))
 
         # обновление всплывающих текстов
@@ -187,7 +187,7 @@ class Game:
                 self.player.attack_timer = 0
                 hb = None
             if not e.dead and e.rect.colliderect(self.player.rect):
-                if self.player.take_damage(1):  # ← True, если урон реально прошёл (не invuln)
+                if self.player.take_damage(1):
                     self.floating_texts.append(FloatingText(
                         self.player.x + self.player.w / 2, self.player.y - 10,
                         "-1 HP", (255, 100, 100)
@@ -210,20 +210,20 @@ class Game:
                     ))
 
         # смерть босса — с задержкой перед экраном победы
-        if self.boss and self.boss.dead and self.boss_spawned:  # ← фикс бага 1
+        if self.boss and self.boss.dead and self.boss_spawned:
             if self.win_delay == 0:
                 self.floating_texts.append(FloatingText(
                     self.boss.x + self.boss.w / 2, self.boss.y - 10,
                     "МОРВЕЙН ПАЛ!", (255, 220, 100), duration=1500
                 ))
                 self.win_delay = 1
-            elif self.win_delay > 0:
+            else:  # ← Заменили elif на else для читаемости
                 self.win_delay += dt
                 if self.win_delay >= 1500:
                     self.state = 'win'
 
         if (self.player.hp <= 0 and self.state != 'win'
-                and self.win_delay == 0):  # ← фикс бага 2
+                and self.win_delay == 0):
             self.state = 'lose'
 
         self.camera.follow(self.player.x + self.player.w/2,
@@ -234,8 +234,8 @@ class Game:
     def draw(self):
         self.screen.fill(COLOR_SKY)
         if self.state == 'title':
-            self._draw_title();
-            pygame.display.flip();
+            self._draw_title()
+            pygame.display.flip()
             return
 
         self.world.draw(self.screen, self.camera)
@@ -320,7 +320,7 @@ class Game:
                                    True, (220, 220, 220)), (WIDTH // 2 - 200, 350))
 
     # ---------- цикл ----------
-    async def run(self):  # <-- ОБЯЗАТЕЛЬНО добавить async перед def
+    async def run(self):
         while self.running:
             dt = self.clock.tick(FPS)
             self.handle_events()

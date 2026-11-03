@@ -1,9 +1,25 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Виртуальные окружения
 venv/
 .venv/
 env/
+
+# Настройки редакторов
 .idea/
 .vscode/
+
+# Файлы сборки (PyInstaller, Pygbag)
+build/
+dist/
+*.spec
+
+# Системный мусор (Windows, macOS)
+Thumbs.db
+.DS_Store
+
+# Логи
 *.log

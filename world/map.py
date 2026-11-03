@@ -25,9 +25,10 @@ class World:
                 self.tiles[ty][tx] = TREE
 
         # озеро (юго-восток)
+        # Оптимизация: вместо ((tx-51)**2 + (ty-35)**2) ** 0.5 < 6 используем r^2 < 36
         for ty in range(30, 40):
             for tx in range(45, 57):
-                if ((tx-51)**2 + (ty-35)**2) ** 0.5 < 6:
+                if (tx-51)**2 + (ty-35)**2 < 36:
                     self.tiles[ty][tx] = WATER
 
         # замок-арена (северо-запад)

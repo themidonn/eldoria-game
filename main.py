@@ -1,9 +1,10 @@
 import asyncio
 import pygame
+from settings import WIDTH, HEIGHT  # ← Импортируем размеры из настроек
 
 # Инициализация Pygame ДО импорта игровых модулей
 pygame.init()
-pygame.display.set_mode((960, 640))  # Ширина и высота из settings.py
+pygame.display.set_mode((WIDTH, HEIGHT))  # ← Используем переменные
 
 from game import Game
 
