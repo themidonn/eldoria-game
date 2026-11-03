@@ -12,6 +12,7 @@ from entities.boss import Boss
 from ui.hud import HUD
 from ui.dialog import Dialog
 from ui.floating_text import FloatingText
+from ui.minimap import MiniMap
 
 class Game:
     TOTAL_CRYSTALS = 3
@@ -37,6 +38,7 @@ class Game:
 
     def _reset(self):
         self.world = World()
+        self.minimap = MiniMap(self.world)
         self.player = Player(30*TILE + 7, 38*TILE + 7)
         self.camera = Camera()
         self.dialog = Dialog()
@@ -278,6 +280,7 @@ class Game:
         # HUD только в игре
         if self.state not in ('win', 'lose'):
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
+            self.minimap.draw(self.screen, self)
 
         pygame.display.flip()
 
