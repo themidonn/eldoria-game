@@ -13,8 +13,8 @@ PLAYER_ATTACK_RANGE = 36
 PLAYER_ATTACK_DAMAGE = 1
 PLAYER_INVULN_TIME = 800       # мс
 
-# Тайлы (FLOOR — резерв под подземелье/второй уровень)
-GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE = range(7)
+# Тайлы (FLOOR — резерв, HOUSE — деревня)
+GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE, HOUSE = range(8)
 
 # Палитра
 COLOR_GRASS       = (86, 160, 70)
@@ -25,6 +25,8 @@ COLOR_STONE       = (110, 110, 120)
 COLOR_DARK_FLOOR  = (60, 40, 40)
 COLOR_GATE        = (170, 140, 60)
 COLOR_SKY         = (30, 30, 40)
+COLOR_HOUSE       = (139, 69, 19) # Коричневый для стен
+COLOR_ROOF        = (100, 40, 30) # Темно-красный для крыши
 
 COLOR_PLAYER   = (60, 140, 220)
 COLOR_SWORD    = (220, 220, 220)

@@ -25,6 +25,8 @@ class MiniMap:
                     color = (60, 100, 60)     # Трава (зеленая)
                 elif t == DARK_FLOOR:
                     color = (70, 40, 40)      # Пол замка (темно-красный)
+                elif t == HOUSE:
+                    color = (150, 80, 50)
                 elif t == WATER:
                     color = (40, 80, 140)     # Вода (синяя)
                 elif t == STONE:

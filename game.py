@@ -48,7 +48,10 @@ class Game:
         self.world = World()
         self.minimap = MiniMap(self.world)
         self.particles = ParticleManager()
-        self.player = Player(30 * TILE + 7, 38 * TILE + 7)
+
+        # Игрок теперь стартует в центре-низу карты
+        self.player = Player(50 * TILE + 7, 65 * TILE + 7)
+
         self.camera = Camera()
         self.dialog = Dialog()
         self.hud = HUD()
@@ -58,43 +61,54 @@ class Game:
         self.boss = None
         self.boss_spawned = False
         self.win_delay = 0
+        self.villager_met = False
+        self.villager_refused = False
         self._spawn()
 
     def _spawn(self):
-        # Старейшина
-        self.npcs.append(NPC(28 * TILE, 38 * TILE, "Старейшина"))
+        # Старейшина (рядом с игроком)
+        self.npcs.append(NPC(48 * TILE, 65 * TILE, "Старейшина"))
+
+        # ДОБАВИТЬ: Житель деревни
+        self.npcs.append(NPC(55 * TILE, 48 * TILE, "Житель"))
 
         # Кристалл 1 — лес (восток)
-        self.crystals.append(Crystal(50 * TILE, 20 * TILE, "Кристалл Леса"))
+        self.crystals.append(Crystal(85 * TILE, 30 * TILE, "Кристалл Леса"))
         for dx in (-3, 0, 3):
-            tx, ty = 50 + dx, 22
+            tx, ty = 85 + dx, 32
             if self.world.tiles[ty][tx] == GRASS:
                 self.enemies.append(Slime(tx * TILE, ty * TILE))
+
         # Кристалл 2 — озеро (юг)
-        self.crystals.append(Crystal(43 * TILE, 35 * TILE, "Кристалл Воды"))
+        self.crystals.append(Crystal(72 * TILE, 60 * TILE, "Кристалл Воды"))
         for dx in (-2, 2):
             for dy in (-2, 2):
-                self.enemies.append(Slime((43 + dx) * TILE, (35 + dy) * TILE))
+                self.enemies.append(Slime((72 + dx) * TILE, (60 + dy) * TILE))
+
         # Кристалл 3 — руины (запад)
-        self.crystals.append(Crystal(8 * TILE, 20 * TILE, "Кристалл Руин"))
+        self.crystals.append(Crystal(15 * TILE, 40 * TILE, "Кристалл Руин"))
         for dx in (-3, 0, 3):
-            tx, ty = 8 + dx, 22
+            tx, ty = 15 + dx, 42
             if self.world.tiles[ty][tx] == GRASS:
                 self.enemies.append(Slime(tx * TILE, ty * TILE, hp=3))
 
-        # Босс — ждёт за воротами
+        # Босс — ждёт за воротами (без изменений)
         self.boss = Boss(7 * TILE, 5 * TILE)
 
-        # Случайные слизни
+        # Случайные слизни (теперь разбросаны по всей огромной карте)
         rng = random.Random(99)
-        for _ in range(15):
+        for _ in range(30):  # Увеличили количество с 15 до 30
             tx, ty = rng.randint(5, self.world.w - 5), rng.randint(5, self.world.h - 5)
-            if self.world.tiles[ty][tx] == GRASS and abs(tx - 30) + abs(ty - 38) > 10:
+            if self.world.tiles[ty][tx] == GRASS and abs(tx - 50) + abs(ty - 65) > 10:
                 self.enemies.append(Slime(tx * TILE, ty * TILE))
 
-        # Зелья лечения (только на траве)
+        # Зелья лечения (новые координаты)
         potion_positions = [
-            (31, 36), (49, 22), (9, 22), (7, 11), (44, 34),
+            (51, 63),  # рядом со стартом
+            (84, 32),  # в лесу, у кристалла 1
+            (16, 42),  # в руинах, у кристалла 3
+            (7, 11),  # перед воротами замка
+            (71, 58),  # у озера, у кристалла 2
         ]
         for tx, ty in potion_positions:
             if self.world.tiles[ty][tx] == GRASS:
@@ -115,11 +129,22 @@ class Game:
                         self.state = 'playing'
                     continue
                 if self.dialog.active:
-                    if e.key in (pygame.K_SPACE, pygame.K_RETURN):
-                        self.dialog.next_page()
-                    elif e.key == pygame.K_ESCAPE:
-                        self.dialog.active = False
-                    continue
+                    if self.dialog.is_choice:
+                        if e.key == pygame.K_y:  # Игрок нажал Да
+                            self.dialog.active = False
+                            self.villager_met = True
+                            self.dialog.show("Житель", VILLAGER_YES)
+                        elif e.key == pygame.K_n:  # Игрок нажал Нет
+                            self.dialog.active = False
+                            self.villager_refused = True  # <-- ДОБАВИТЬ: Запоминаем отказ
+                            self.dialog.show("Житель", VILLAGER_NO)
+                        continue
+                    else:
+                        if e.key in (pygame.K_SPACE, pygame.K_RETURN):
+                            self.dialog.next_page()
+                        elif e.key == pygame.K_ESCAPE:
+                            self.dialog.active = False
+                        continue
 
                 # --- ЛОГИКА ПАУЗЫ ---
                 if e.key == pygame.K_ESCAPE:
@@ -144,6 +169,18 @@ class Game:
         for npc in self.npcs:
             if self.player.rect.inflate(40, 40).colliderect(npc.rect):
                 n = self.player.crystals
+
+                if npc.name == "Житель":
+                    if self.villager_refused:  # <-- ДОБАВИТЬ: Если игрок отказал
+                        return  # Просто выходим, диалог не начинается
+
+                    if not self.villager_met:
+                        self.dialog.show(npc.name, VILLAGER_INTRO, is_choice=True)
+                    else:
+                        self.dialog.show(npc.name, VILLAGER_WAIT)
+                    return
+
+                # Твой старый код диалога со Старейшиной
                 if n >= self.TOTAL_CRYSTALS and not self.boss_spawned:
                     self.world.gate_open = True
                     self.boss.dead = False
