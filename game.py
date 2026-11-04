@@ -31,6 +31,18 @@ class Game:
         self.font_win_big = pygame.font.SysFont('arial', 64, bold=True)
         self.font_win_small = pygame.font.SysFont('arial', 26)
         self.font_hint_banner = pygame.font.SysFont('arial', 18, bold=True)  # баннер «Замок открыт»
+        self.font_quest = pygame.font.SysFont('arial', 16, bold=True)
+
+        # --- НОВОЕ: Кэшируем плашку квеста ---
+        quest_text = self.font_quest.render("Задание: Найти ключ жителя", True, (255, 200, 100))
+        rect_w = quest_text.get_width() + 20
+        rect_h = quest_text.get_height() + 10
+        self.quest_surface = pygame.Surface((rect_w, rect_h), pygame.SRCALPHA)
+        self.quest_surface.fill((20, 20, 30, 200))  # Темный фон
+        # Рисуем рамку прямо на поверхности
+        pygame.draw.rect(self.quest_surface, (200, 180, 120), (0, 0, rect_w, rect_h), 2, border_radius=5)
+        # Вставляем текст
+        self.quest_surface.blit(quest_text, (10, 5))
 
         # ── оверлеи (кэш) ──
         self.overlay_black = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -360,6 +372,10 @@ class Game:
         if self.state not in ('win', 'lose', 'paused'):
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
             self.minimap.draw(self.screen, self)
+
+            # --- НОВОЕ: ТРЕКЕР КВЕСТА ---
+            if self.villager_met and not self.villager_refused:
+                self.screen.blit(self.quest_surface, (20, 60))  # <-- ТОЛЬКО ЭТА СТРОЧКА!
 
         # Красная пульсирующая рамка при низком здоровье (1-2 HP)
         if self.player.hp <= 2 and self.state == 'playing':
