@@ -57,7 +57,7 @@ class Game:
         self.floating_texts = []
         self.boss = None
         self.boss_spawned = False
-        self.win_delay = 0  # ← Перенесли инициализацию таймера СЮДА (до спавна)
+        self.win_delay = 0
         self._spawn()
 
     def _spawn(self):
@@ -94,11 +94,7 @@ class Game:
 
         # Зелья лечения (только на траве)
         potion_positions = [
-            (31, 36),  # рядом со стартом — обучающее
-            (49, 22),  # в лесу, у кристалла 1
-            (9, 22),  # в руинах, у кристалла 3
-            (7, 11),  # перед воротами замка — тактика перед боссом
-            (44, 34),  # у озера, у кристалла 2
+            (31, 36), (49, 22), (9, 22), (7, 11), (44, 34),
         ]
         for tx, ty in potion_positions:
             if self.world.tiles[ty][tx] == GRASS:
@@ -111,11 +107,11 @@ class Game:
                 self.running = False
             elif e.type == pygame.KEYDOWN:
                 if self.state == 'title':
-                    self.state = 'playing';
+                    self.state = 'playing'
                     continue
                 if self.state in ('win', 'lose'):
                     if e.key == pygame.K_r:
-                        self._reset();
+                        self._reset()
                         self.state = 'playing'
                     continue
                 if self.dialog.active:
@@ -124,12 +120,25 @@ class Game:
                     elif e.key == pygame.K_ESCAPE:
                         self.dialog.active = False
                     continue
+
+                # --- ЛОГИКА ПАУЗЫ ---
+                if e.key == pygame.K_ESCAPE:
+                    if self.state == 'playing':
+                        self.state = 'paused'
+                    elif self.state == 'paused':
+                        self.state = 'playing'
+                    continue
+
+                if self.state == 'paused':
+                    if e.key == pygame.K_q:
+                        self.running = False
+                    continue
+                # --------------------
+
                 if e.key in (pygame.K_SPACE, pygame.K_j):
                     self.player.try_attack()
                 elif e.key == pygame.K_e:
                     self._interact()
-                elif e.key == pygame.K_ESCAPE:
-                    self.running = False
 
     def _interact(self):
         for npc in self.npcs:
@@ -168,7 +177,7 @@ class Game:
                     (200, 240, 255)
                 ))
 
-        # подбор зелий (только если HP не полное)
+        # подбор зелий
         for p in self.potions:
             if p.collected: continue
             p.update(dt)
@@ -200,8 +209,6 @@ class Game:
                 self.player.attack_timer = 0
                 hb = None
                 self.camera.add_shake(2)
-
-                # НОВОЕ: Вылетающая цифра урона над слизнем
                 self.floating_texts.append(FloatingText(
                     e.x + e.w / 2, e.y - 10, "-1", (255, 255, 100), duration=600
                 ))
@@ -226,8 +233,6 @@ class Game:
                                       self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
                 self.camera.add_shake(3)
-
-                # НОВОЕ: Вылетающая цифра урона над боссом
                 self.floating_texts.append(FloatingText(
                     self.boss.x + self.boss.w / 2, self.boss.y - 10, "-1", (255, 255, 100), duration=600
                 ))
@@ -240,7 +245,7 @@ class Game:
                         "-1 HP", (255, 100, 100)
                     ))
 
-        # смерть босса — с задержкой перед экраном победы
+        # смерть босса
         if self.boss and self.boss.dead and self.boss_spawned:
             if self.win_delay == 0:
                 self.particles.spawn_burst(
@@ -314,19 +319,21 @@ class Game:
             )
             self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 70))
 
-        if self.state == 'win':   self._overlay_win()
-        if self.state == 'lose':  self._overlay_lose()
-
-        # HUD только в игре
-        if self.state not in ('win', 'lose'):
+        # HUD только в игре (рисуем ДО оверлеев, чтобы пауза перекрывала его)
+        if self.state not in ('win', 'lose', 'paused'):
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
             self.minimap.draw(self.screen, self)
 
-        # НОВОЕ: Красная пульсирующая рамка при низком здоровье (1-2 HP)
+        # Красная пульсирующая рамка при низком здоровье (1-2 HP)
         if self.player.hp <= 2 and self.state == 'playing':
             pulse = int(abs(math.sin(pygame.time.get_ticks() * 0.005)) * 100) + 50
             self.vignette.set_alpha(pulse)
             self.screen.blit(self.vignette, (0, 0))
+
+        # Оверлеи (экраны паузы/смерти/победы) рисуем САМЫМИ ПОСЛЕДНИМИ
+        if self.state == 'win':   self._overlay_win()
+        if self.state == 'lose':  self._overlay_lose()
+        if self.state == 'paused': self._overlay_pause()
 
         pygame.display.flip()
 
@@ -367,6 +374,20 @@ class Game:
                          (WIDTH // 2 - 140, 250))
         self.screen.blit(fs.render("Нажми R для повторной попытки",
                                    True, (220, 220, 220)), (WIDTH // 2 - 200, 350))
+
+    def _overlay_pause(self):
+        self.screen.blit(self.overlay_black, (0, 0))
+        fb = self.font_win_big
+        fs = self.font_win_small
+
+        t = fb.render("ПАУЗА", True, (240, 210, 130))
+        self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 200))
+
+        i1 = fs.render("ESC — продолжить игру", True, (220, 220, 240))
+        i2 = fs.render("Q — выйти из игры", True, (200, 200, 200))
+
+        self.screen.blit(i1, (WIDTH // 2 - i1.get_width() // 2, 300))
+        self.screen.blit(i2, (WIDTH // 2 - i2.get_width() // 2, 350))
 
     # ---------- цикл ----------
     async def run(self):
