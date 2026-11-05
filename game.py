@@ -2,6 +2,7 @@ import pygame, random, asyncio, math
 from settings import *
 from data.story import *
 from world.map import World
+from world.dungeon import Dungeon
 from world.camera import Camera
 from entities.player import Player
 from entities.enemy import Slime
@@ -75,8 +76,12 @@ class Game:
         self._reset()  # ← последним
 
     def _reset(self):
-        self.world = World()
-        self.minimap = MiniMap(self.world)
+        self.main_world = World()
+        self.dungeon = None
+        self.current_map = self.main_world
+        self.level = 1
+        self.saved_position = None
+        self.minimap = MiniMap(self.main_world)
         self.particles = ParticleManager()
         self.player = Player(50 * TILE + 7, 65 * TILE + 7)
         self.camera = Camera()
@@ -164,6 +169,30 @@ class Game:
         # Замок (северо-запад) — перед воротами
         self.lore_stones.append(LoreStone(6 * TILE, 12 * TILE, "Камень у врат", LORE_CASTLE))
 
+    @property
+    def world(self):
+        return self.current_map
+
+    def enter_dungeon(self):
+        if self.dungeon is None:
+            self.dungeon = Dungeon()
+        self.saved_position = (self.player.x, self.player.y)
+        self.current_map = self.dungeon
+        self.level = 2
+        self.player.x = 6 * TILE + 7
+        self.player.y = (self.dungeon.h - 4) * TILE + 7
+        self.camera = Camera()
+        self.particles = ParticleManager()
+        self.floating_texts = []
+
+    def exit_dungeon(self):
+        self.current_map = self.main_world
+        self.level = 1
+        if self.saved_position:
+            self.player.x, self.player.y = self.saved_position
+        self.camera = Camera()
+        self.particles = ParticleManager()
+        self.floating_texts = []
     def handle_events(self):
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
@@ -213,6 +242,21 @@ class Game:
                     self._interact()
 
     def _interact(self):
+        # Проверка на лестницы (переход между уровнями)
+        px_tile = int((self.player.x + self.player.w/2) // TILE)
+        py_tile = int((self.player.y + self.player.h/2) // TILE)
+        if 0 <= py_tile < self.world.h and 0 <= px_tile < self.world.w:
+            current_tile = self.world.tiles[py_tile][px_tile]
+            if current_tile == STAIRS_DOWN and self.level == 1:
+                self.enter_dungeon()
+                return
+            elif current_tile == STAIRS_UP and self.level == 2:
+                self.exit_dungeon()
+                return
+
+        # В подземелье больше нечего взаимодействовать
+        if self.level != 1:
+            return
         # Проверка на древние камни
         for stone in self.lore_stones:
             if self.player.rect.inflate(40, 40).colliderect(stone.rect):
@@ -272,108 +316,111 @@ class Game:
             return
         self.player.update(pygame.key.get_pressed(), dt, self.world)
 
-        for c in self.crystals:
-            if c.collected: continue
-            c.update(dt)
-            if self.player.rect.colliderect(c.rect):
-                c.collected = True
-                self.player.crystals += 1
-                self.floating_texts.append(FloatingText(
-                    self.player.x + self.player.w / 2, self.player.y - 10,
-                    CRYSTAL_MSG, (200, 240, 255)
-                ))
-
-        for p in self.potions:
-            if p.collected: continue
-            p.update(dt)
-            if self.player.rect.colliderect(p.rect):
-                if self.player.hp < self.player.max_hp:
-                    p.collected = True
-                    self.player.hp += 1
+        # --- ЛОГИКА ГЛАВНОГО МИРА (только на уровне 1) ---
+        if self.level == 1:
+            for c in self.crystals:
+                if c.collected: continue
+                c.update(dt)
+                if self.player.rect.colliderect(c.rect):
+                    c.collected = True
+                    self.player.crystals += 1
                     self.floating_texts.append(FloatingText(
                         self.player.x + self.player.w / 2, self.player.y - 10,
-                        POTION_MSG, (100, 255, 100)
+                        CRYSTAL_MSG, (200, 240, 255)
                     ))
 
-        if self.key and not self.key.collected:
-            self.key.update(dt)
-            if self.player.rect.colliderect(self.key.rect):
-                self.key.collected = True
-                self.has_key = True
-                self.floating_texts.append(FloatingText(
-                    self.player.x + self.player.w / 2, self.player.y - 10,
-                    KEY_MSG, (255, 215, 0)
-                ))
+            for p in self.potions:
+                if p.collected: continue
+                p.update(dt)
+                if self.player.rect.colliderect(p.rect):
+                    if self.player.hp < self.player.max_hp:
+                        p.collected = True
+                        self.player.hp += 1
+                        self.floating_texts.append(FloatingText(
+                            self.player.x + self.player.w / 2, self.player.y - 10,
+                            POTION_MSG, (100, 255, 100)
+                        ))
 
+            if self.key and not self.key.collected:
+                self.key.update(dt)
+                if self.player.rect.colliderect(self.key.rect):
+                    self.key.collected = True
+                    self.has_key = True
+                    self.floating_texts.append(FloatingText(
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        KEY_MSG, (255, 215, 0)
+                    ))
+
+            # враги
+            hb = self.player.get_attack_hitbox()
+            for e in self.enemies:
+                if e.dead: continue
+                e.update(self.player, self.world, dt)
+                if hb and hb.colliderect(e.rect):
+                    e.take_damage(self.player.damage,
+                                  self.player.x + self.player.w / 2,
+                                  self.player.y + self.player.h / 2)
+                    self.player.attack_timer = 0
+                    hb = None
+                    self.camera.add_shake(2)
+                    self.floating_texts.append(FloatingText(
+                        e.x + e.w / 2, e.y - 10, "-1", (255, 255, 100), duration=600
+                    ))
+
+                if not e.dead and e.rect.colliderect(self.player.rect):
+                    if self.player.take_damage(1):
+                        self.camera.add_shake(5)
+                        self.floating_texts.append(FloatingText(
+                            self.player.x + self.player.w / 2, self.player.y - 10,
+                            "-1 HP", (255, 100, 100)
+                        ))
+                if e.dead:
+                    self.particles.spawn_burst(e.x + e.w / 2, e.y + e.h / 2, COLOR_SLIME)
+
+            # босс
+            if self.boss and not self.boss.dead:
+                self.boss.update(self.player, self.world, dt)
+                hb = self.player.get_attack_hitbox()
+                if hb and hb.colliderect(self.boss.rect):
+                    self.boss.take_damage(self.player.damage,
+                                          self.player.x + self.player.w / 2,
+                                          self.player.y + self.player.h / 2)
+                    self.player.attack_timer = 0
+                    self.camera.add_shake(3)
+                    self.floating_texts.append(FloatingText(
+                        self.boss.x + self.boss.w / 2, self.boss.y - 10, "-1", (255, 255, 100), duration=600
+                    ))
+
+                if not self.boss.dead and self.boss.rect.colliderect(self.player.rect):
+                    if self.player.take_damage(1):
+                        self.camera.add_shake(5)
+                        self.floating_texts.append(FloatingText(
+                            self.player.x + self.player.w / 2, self.player.y - 10,
+                            "-1 HP", (255, 100, 100)
+                        ))
+
+            # смерть босса
+            if self.boss and self.boss.dead and self.boss_spawned:
+                if self.win_delay == 0:
+                    self.particles.spawn_burst(
+                        self.boss.x + self.boss.w / 2, self.boss.y + self.boss.h / 2,
+                        COLOR_BOSS, count=40
+                    )
+                    self.camera.add_shake(10)
+                    self.floating_texts.append(FloatingText(
+                        self.boss.x + self.boss.w / 2, self.boss.y - 10,
+                        "МОРВЕЙН ПАЛ!", (255, 220, 100), duration=1500
+                    ))
+                    self.win_delay = 1
+                else:
+                    self.win_delay += dt
+                    if self.win_delay >= 1500:
+                        self.state = 'win'
+
+        # --- ОБЩАЯ ЛОГИКА (работает на всех уровнях) ---
         for ft in self.floating_texts:
             ft.update(dt)
         self.floating_texts = [ft for ft in self.floating_texts if not ft.dead]
-
-        # враги
-        hb = self.player.get_attack_hitbox()
-        for e in self.enemies:
-            if e.dead: continue
-            e.update(self.player, self.world, dt)
-            if hb and hb.colliderect(e.rect):
-                e.take_damage(self.player.damage,
-                              self.player.x + self.player.w / 2,
-                              self.player.y + self.player.h / 2)
-                self.player.attack_timer = 0
-                hb = None
-                self.camera.add_shake(2)
-                self.floating_texts.append(FloatingText(
-                    e.x + e.w / 2, e.y - 10, "-1", (255, 255, 100), duration=600
-                ))
-
-            if not e.dead and e.rect.colliderect(self.player.rect):
-                if self.player.take_damage(1):
-                    self.camera.add_shake(5)
-                    self.floating_texts.append(FloatingText(
-                        self.player.x + self.player.w / 2, self.player.y - 10,
-                        "-1 HP", (255, 100, 100)
-                    ))
-            if e.dead:
-                self.particles.spawn_burst(e.x + e.w / 2, e.y + e.h / 2, COLOR_SLIME)
-
-        # босс
-        if self.boss and not self.boss.dead:
-            self.boss.update(self.player, self.world, dt)
-            hb = self.player.get_attack_hitbox()
-            if hb and hb.colliderect(self.boss.rect):
-                self.boss.take_damage(self.player.damage,
-                                      self.player.x + self.player.w / 2,
-                                      self.player.y + self.player.h / 2)
-                self.player.attack_timer = 0
-                self.camera.add_shake(3)
-                self.floating_texts.append(FloatingText(
-                    self.boss.x + self.boss.w / 2, self.boss.y - 10, "-1", (255, 255, 100), duration=600
-                ))
-
-            if not self.boss.dead and self.boss.rect.colliderect(self.player.rect):
-                if self.player.take_damage(1):
-                    self.camera.add_shake(5)
-                    self.floating_texts.append(FloatingText(
-                        self.player.x + self.player.w / 2, self.player.y - 10,
-                        "-1 HP", (255, 100, 100)
-                    ))
-
-        # смерть босса
-        if self.boss and self.boss.dead and self.boss_spawned:
-            if self.win_delay == 0:
-                self.particles.spawn_burst(
-                    self.boss.x + self.boss.w / 2, self.boss.y + self.boss.h / 2,
-                    COLOR_BOSS, count=40
-                )
-                self.camera.add_shake(10)
-                self.floating_texts.append(FloatingText(
-                    self.boss.x + self.boss.w / 2, self.boss.y - 10,
-                    "МОРВЕЙН ПАЛ!", (255, 220, 100), duration=1500
-                ))
-                self.win_delay = 1
-            else:
-                self.win_delay += dt
-                if self.win_delay >= 1500:
-                    self.state = 'win'
 
         if (self.player.hp <= 0 and self.state != 'win'
                 and self.win_delay == 0):
@@ -391,57 +438,66 @@ class Game:
             pygame.display.flip()
             return
 
+        # Фон карты (главный мир или подземелье — рисуется всегда)
         self.world.draw(self.screen, self.camera)
-        for stone in self.lore_stones:
-            stone.draw(self.screen, self.camera)
-        for c in self.crystals: c.draw(self.screen, self.camera)
-        if self.key and not self.key.collected:
-            self.key.draw(self.screen, self.camera)
-        for p in self.potions:  p.draw(self.screen, self.camera)
-        for n in self.npcs: n.draw(self.screen, self.camera)
 
-        ents = [(e.y + e.h, e) for e in self.enemies if not e.dead]
-        if self.boss and not self.boss.dead:
-            ents.append((self.boss.y + self.boss.h, self.boss))
-        ents.append((self.player.y + self.player.h, self.player))
-        ents.sort(key=lambda p: p[0])
-        for _, e in ents:
-            if e is self.player:
-                self.player.draw(self.screen, self.camera)
-            elif e is self.boss:
-                self.boss.draw(self.screen, self.camera)
-            else:
-                e.draw(self.screen, self.camera)
+        # --- ОТРИСОВКА ГЛАВНОГО МИРА (только на уровне 1) ---
+        if self.level == 1:
+            for stone in self.lore_stones:
+                stone.draw(self.screen, self.camera)
+            for c in self.crystals: c.draw(self.screen, self.camera)
+            if self.key and not self.key.collected:
+                self.key.draw(self.screen, self.camera)
+            for p in self.potions:  p.draw(self.screen, self.camera)
+            for n in self.npcs: n.draw(self.screen, self.camera)
 
+            ents = [(e.y + e.h, e) for e in self.enemies if not e.dead]
+            if self.boss and not self.boss.dead:
+                ents.append((self.boss.y + self.boss.h, self.boss))
+            ents.append((self.player.y + self.player.h, self.player))
+            ents.sort(key=lambda p: p[0])
+            for _, e in ents:
+                if e is self.player:
+                    self.player.draw(self.screen, self.camera)
+                elif e is self.boss:
+                    self.boss.draw(self.screen, self.camera)
+                else:
+                    e.draw(self.screen, self.camera)
+        else:
+            # В подземелье рисуем только игрока (и потом врагов, когда добавим)
+            self.player.draw(self.screen, self.camera)
+
+        # --- ОБЩИЕ ЭЛЕМЕНТЫ (рисуются на всех уровнях) ---
         self.dialog.draw(self.screen)
         self.particles.draw(self.screen, self.camera)
 
         for ft in self.floating_texts:
             ft.draw(self.screen, self.camera)
 
-        # баннер «Замок открыт»
-        cx = self.player.x + self.player.w // 2
-        cy = self.player.y + self.player.h // 2
-        in_castle = (2 * TILE <= cx <= 13 * TILE and 2 * TILE <= cy <= 10 * TILE)
-        if self.boss_spawned and not self.boss.dead and not in_castle:
-            self.screen.blit(self.banner_text, (WIDTH // 2 - self.banner_text.get_width() // 2, 70))
+        # Баннер — только в главном мире
+        if self.level == 1 and self.boss_spawned and not self.boss.dead:
+            cx = self.player.x + self.player.w // 2
+            cy = self.player.y + self.player.h // 2
+            in_castle = (2 * TILE <= cx <= 13 * TILE and 2 * TILE <= cy <= 10 * TILE)
+            if not in_castle:
+                self.screen.blit(self.banner_text, (WIDTH // 2 - self.banner_text.get_width() // 2, 70))
 
-        # HUD и мини-карта
+        # HUD
         if self.state not in ('win', 'lose', 'paused'):
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
-            self.minimap.draw(self.screen, self)
+            if self.level == 1:
+                self.minimap.draw(self.screen, self)
+                if (self.villager_met and not self.villager_refused
+                        and not self.has_key and not self.quest_completed):
+                    self.screen.blit(self.quest_surface, (20, 60))
 
-            if (self.villager_met and not self.villager_refused
-                    and not self.has_key and not self.quest_completed):
-                self.screen.blit(self.quest_surface, (20, 60))
-
-        # Красная пульсирующая рамка
+        # Красная пульсирующая рамка при низком здоровье
         if self.player.hp <= 2 and self.state == 'playing':
             pulse = int(abs(math.sin(pygame.time.get_ticks() * 0.005)) * 100) + 50
             self.vignette.set_alpha(pulse)
             self.screen.blit(self.vignette, (0, 0))
 
-        # Оверлеи
+        # Оверлеи (экраны паузы/смерти/победы) — всегда последними
         if self.state == 'win':   self._overlay_win()
         if self.state == 'lose':  self._overlay_lose()
         if self.state == 'paused': self._overlay_pause()

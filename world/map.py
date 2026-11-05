@@ -60,6 +60,9 @@ class World:
         for ty in range(50, 54):
             for tx in range(55, 58):
                 self.tiles[ty][tx] = HOUSE
+
+        # Колодец в деревне (вход в подземелье)
+        self.tiles[55][60] = STAIRS_DOWN
         # -----------------------------
 
         # чистим площадки под ключевые объекты
@@ -81,7 +84,7 @@ class World:
         t = self.tiles[ty][tx]
         if t == GATE:
             return self.gate_open
-        return t in (GRASS, FLOOR, DARK_FLOOR)
+        return t in (GRASS, FLOOR, DARK_FLOOR, STAIRS_DOWN)
 
     def is_walkable_rect(self, x, y, w, h):
         tx0, ty0 = int(x // TILE), int(y // TILE)
@@ -130,6 +133,21 @@ class World:
                     pygame.draw.rect(screen, COLOR_ROOF, (sx, sy, TILE, TILE // 2))
                     # Контур, чтобы дом выделялся
                     pygame.draw.rect(screen, (40, 20, 10), r, 1)
+                elif t == STAIRS_DOWN:
+                    # Колодец в деревне
+                    pygame.draw.rect(screen, COLOR_GRASS_DARK, r)
+                    pygame.draw.circle(screen, COLOR_STONE, (sx + TILE//2, sy + TILE//2), TILE//2 - 2)
+                    pygame.draw.circle(screen, (20, 20, 30), (sx + TILE//2, sy + TILE//2), TILE//2 - 8)
+                elif t == STAIRS_UP:
+                    pygame.draw.rect(screen, COLOR_STONE, r)
+                    for i in range(3):
+                        y = sy + 6 + i * 10
+                        pygame.draw.line(screen, (50, 50, 60), (sx + 6, y), (sx + TILE - 6, y), 3)
+                    pygame.draw.polygon(screen, COLOR_STAIRS_UP, [
+                        (sx + TILE//2, sy + 8),
+                        (sx + TILE//2 - 6, sy + 18),
+                        (sx + TILE//2 + 6, sy + 18)
+                    ])
                 elif t == GATE:
                     pygame.draw.rect(screen, COLOR_STONE, r)
                     color = (90, 200, 100) if self.gate_open else COLOR_GATE

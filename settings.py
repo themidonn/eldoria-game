@@ -14,7 +14,7 @@ PLAYER_ATTACK_DAMAGE = 1
 PLAYER_INVULN_TIME = 800       # мс
 
 # Тайлы (FLOOR — резерв, HOUSE — деревня)
-GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE, HOUSE = range(8)
+GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE, HOUSE, STAIRS_UP, STAIRS_DOWN = range(10)
 
 # Палитра
 COLOR_GRASS       = (86, 160, 70)
@@ -27,6 +27,8 @@ COLOR_GATE        = (170, 140, 60)
 COLOR_SKY         = (30, 30, 40)
 COLOR_HOUSE       = (139, 69, 19) # Коричневый для стен
 COLOR_ROOF        = (100, 40, 30) # Темно-красный для крыши
+COLOR_STAIRS_UP   = (200, 100, 100)  # Красная стрелка вверх
+COLOR_STAIRS_DOWN = (100, 200, 100)  # Зелёная стрелка вниз
 
 COLOR_SWORD_UPGRADED = (255, 215, 0)  # Золотой клинок
 
