@@ -10,6 +10,7 @@ from entities.pickup import Crystal
 from entities.key import Key
 from entities.potion import Potion
 from entities.boss import Boss
+from entities.lore_stone import LoreStone
 from ui.hud import HUD
 from ui.dialog import Dialog
 from ui.floating_text import FloatingText
@@ -83,6 +84,7 @@ class Game:
         self.hud = HUD()
         self.enemies, self.npcs, self.crystals = [], [], []
         self.potions = []
+        self.lore_stones = []
         self.floating_texts = []
         self.boss = None
         self.boss_spawned = False
@@ -92,6 +94,7 @@ class Game:
         self.has_key = False
         self.key = None
         self.quest_completed = False
+        self.lore_reward_given = False
         self._spawn()
 
     def _spawn(self):
@@ -149,6 +152,18 @@ class Game:
                 self.key = Key(tx * TILE, ty * TILE)
                 break
 
+        # --- ДРЕВНИЕ КАМНИ (ЛОР) ---
+        # Стартовая локация (сдвинули ближе к игроку, в зону очистки)
+        self.lore_stones.append(LoreStone(53 * TILE, 63 * TILE, "Древний камень", LORE_START))
+        # Руины (запад) — внутри зоны очистки кристалла
+        self.lore_stones.append(LoreStone(14 * TILE, 40 * TILE, "Камень Аэтельгарда", LORE_RUINS))
+        # Озеро (юг) — на берегу, внутри зоны очистки
+        self.lore_stones.append(LoreStone(71 * TILE, 50 * TILE, "Камень Озера", LORE_LAKE))
+        # Деревня (центр) — на площади деревни
+        self.lore_stones.append(LoreStone(58 * TILE, 50 * TILE, "Камень деревни", LORE_VILLAGE))
+        # Замок (северо-запад) — перед воротами
+        self.lore_stones.append(LoreStone(6 * TILE, 12 * TILE, "Камень у врат", LORE_CASTLE))
+
     def handle_events(self):
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
@@ -198,6 +213,24 @@ class Game:
                     self._interact()
 
     def _interact(self):
+        # Проверка на древние камни
+        for stone in self.lore_stones:
+            if self.player.rect.inflate(40, 40).colliderect(stone.rect):
+                self.dialog.show(stone.title, stone.text)
+                stone.is_read = True  # <-- Руна гаснет
+
+                # --- НОВОЕ: Проверяем, прочитаны ли ВСЕ камни ---
+                if not self.lore_reward_given and all(s.is_read for s in self.lore_stones):
+                    self.lore_reward_given = True
+                    self.player.max_hp += 1
+                    self.player.hp = self.player.max_hp  # Полное лечение
+                    self.floating_texts.append(FloatingText(
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        "Знание предков! +1 Макс. HP",
+                        (180, 220, 255), duration=2500
+                    ))
+                return
+
         for npc in self.npcs:
             if self.player.rect.inflate(40, 40).colliderect(npc.rect):
                 n = self.player.crystals
@@ -359,6 +392,8 @@ class Game:
             return
 
         self.world.draw(self.screen, self.camera)
+        for stone in self.lore_stones:
+            stone.draw(self.screen, self.camera)
         for c in self.crystals: c.draw(self.screen, self.camera)
         if self.key and not self.key.collected:
             self.key.draw(self.screen, self.camera)
