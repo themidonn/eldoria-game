@@ -7,6 +7,7 @@ from entities.player import Player
 from entities.enemy import Slime
 from entities.npc import NPC
 from entities.pickup import Crystal
+from entities.key import Key
 from entities.potion import Potion
 from entities.boss import Boss
 from ui.hud import HUD
@@ -25,24 +26,28 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
         self.state = 'title'
+
         # ── шрифты (кэш) ──
         self.font_title_big = pygame.font.SysFont('arial', 56, bold=True)
         self.font_title_small = pygame.font.SysFont('arial', 24)
         self.font_win_big = pygame.font.SysFont('arial', 64, bold=True)
         self.font_win_small = pygame.font.SysFont('arial', 26)
-        self.font_hint_banner = pygame.font.SysFont('arial', 18, bold=True)  # баннер «Замок открыт»
+        self.font_hint_banner = pygame.font.SysFont('arial', 18, bold=True)
         self.font_quest = pygame.font.SysFont('arial', 16, bold=True)
 
-        # --- НОВОЕ: Кэшируем плашку квеста ---
+        # --- Кэшируем плашку квеста ---
         quest_text = self.font_quest.render("Задание: Найти ключ жителя", True, (255, 200, 100))
         rect_w = quest_text.get_width() + 20
         rect_h = quest_text.get_height() + 10
         self.quest_surface = pygame.Surface((rect_w, rect_h), pygame.SRCALPHA)
-        self.quest_surface.fill((20, 20, 30, 200))  # Темный фон
-        # Рисуем рамку прямо на поверхности
+        self.quest_surface.fill((20, 20, 30, 200))
         pygame.draw.rect(self.quest_surface, (200, 180, 120), (0, 0, rect_w, rect_h), 2, border_radius=5)
-        # Вставляем текст
         self.quest_surface.blit(quest_text, (10, 5))
+
+        # --- Кэшируем баннер «Замок открыт» ---
+        self.banner_text = self.font_hint_banner.render(
+            "Замок Морвейна открыт! На северо-запад!", True, (255, 200, 100)
+        )
 
         # ── оверлеи (кэш) ──
         self.overlay_black = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -50,9 +55,21 @@ class Game:
         self.overlay_red = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         self.overlay_red.fill((40, 0, 0, 180))
 
-        # НОВОЕ: Красная рамка для низкого здоровья (Vignette)
         self.vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         pygame.draw.rect(self.vignette, (255, 0, 0), (0, 0, WIDTH, HEIGHT), width=30)
+
+        # --- Кэшируем тексты экранов Победы и Поражения ---
+        self.win_text_big = self.font_win_big.render("ПОБЕДА!", True, (240, 210, 130))
+        self.win_text_small = self.font_win_small.render("Священное Пламя возвращено. Эльдория спасена.", True,
+                                                         (220, 220, 240))
+        self.win_text_hint = self.font_win_small.render("Нажми R для новой игры", True, (200, 200, 200))
+
+        self.lose_text_big = self.font_win_big.render("ТЫ ПАЛ...", True, (200, 60, 60))
+        self.lose_text_small = self.font_win_small.render("Нажми R для повторной попытки", True, (220, 220, 220))
+
+        self.pause_text_big = self.font_win_big.render("ПАУЗА", True, (240, 210, 130))
+        self.pause_text_1 = self.font_win_small.render("ESC — продолжить игру", True, (220, 220, 240))
+        self.pause_text_2 = self.font_win_small.render("Q — выйти из игры", True, (200, 200, 200))
 
         self._reset()  # ← последним
 
@@ -60,10 +77,7 @@ class Game:
         self.world = World()
         self.minimap = MiniMap(self.world)
         self.particles = ParticleManager()
-
-        # Игрок теперь стартует в центре-низу карты
         self.player = Player(50 * TILE + 7, 65 * TILE + 7)
-
         self.camera = Camera()
         self.dialog = Dialog()
         self.hud = HUD()
@@ -75,13 +89,15 @@ class Game:
         self.win_delay = 0
         self.villager_met = False
         self.villager_refused = False
+        self.has_key = False
+        self.key = None
+        self.quest_completed = False
         self._spawn()
 
     def _spawn(self):
         # Старейшина (рядом с игроком)
         self.npcs.append(NPC(48 * TILE, 65 * TILE, "Старейшина"))
-
-        # ДОБАВИТЬ: Житель деревни
+        # Житель деревни
         self.npcs.append(NPC(55 * TILE, 48 * TILE, "Житель"))
 
         # Кристалл 1 — лес (восток)
@@ -91,11 +107,13 @@ class Game:
             if self.world.tiles[ty][tx] == GRASS:
                 self.enemies.append(Slime(tx * TILE, ty * TILE))
 
-        # Кристалл 2 — озеро (юг)
-        self.crystals.append(Crystal(72 * TILE, 60 * TILE, "Кристалл Воды"))
+        # Кристалл 2 — озеро (северный берег)
+        self.crystals.append(Crystal(72 * TILE, 50 * TILE, "Кристалл Воды"))
         for dx in (-2, 2):
             for dy in (-2, 2):
-                self.enemies.append(Slime((72 + dx) * TILE, (60 + dy) * TILE))
+                tx, ty = 72 + dx, 50 + dy
+                if self.world.tiles[ty][tx] == GRASS:
+                    self.enemies.append(Slime(tx * TILE, ty * TILE))
 
         # Кристалл 3 — руины (запад)
         self.crystals.append(Crystal(15 * TILE, 40 * TILE, "Кристалл Руин"))
@@ -104,29 +122,33 @@ class Game:
             if self.world.tiles[ty][tx] == GRASS:
                 self.enemies.append(Slime(tx * TILE, ty * TILE, hp=3))
 
-        # Босс — ждёт за воротами (без изменений)
+        # Босс
         self.boss = Boss(7 * TILE, 5 * TILE)
 
-        # Случайные слизни (теперь разбросаны по всей огромной карте)
+        # Случайные слизни
         rng = random.Random(99)
-        for _ in range(30):  # Увеличили количество с 15 до 30
+        for _ in range(30):
             tx, ty = rng.randint(5, self.world.w - 5), rng.randint(5, self.world.h - 5)
             if self.world.tiles[ty][tx] == GRASS and abs(tx - 50) + abs(ty - 65) > 10:
                 self.enemies.append(Slime(tx * TILE, ty * TILE))
 
-        # Зелья лечения (новые координаты)
+        # Зелья лечения
         potion_positions = [
-            (51, 63),  # рядом со стартом
-            (84, 32),  # в лесу, у кристалла 1
-            (16, 42),  # в руинах, у кристалла 3
-            (7, 11),  # перед воротами замка
-            (71, 58),  # у озера, у кристалла 2
+            (51, 63), (84, 32), (16, 42), (7, 11), (72, 48),
         ]
         for tx, ty in potion_positions:
             if self.world.tiles[ty][tx] == GRASS:
                 self.potions.append(Potion(tx * TILE, ty * TILE))
 
-    # ---------- события ----------
+        # --- РАНДОМНЫЙ СПАВН КЛЮЧА ---
+        rng_key = random.Random()
+        while True:
+            tx = rng_key.randint(75, 95)
+            ty = rng_key.randint(20, 45)
+            if self.world.tiles[ty][tx] == GRASS:
+                self.key = Key(tx * TILE, ty * TILE)
+                break
+
     def handle_events(self):
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
@@ -142,13 +164,13 @@ class Game:
                     continue
                 if self.dialog.active:
                     if self.dialog.is_choice:
-                        if e.key == pygame.K_y:  # Игрок нажал Да
+                        if e.key == pygame.K_y:
                             self.dialog.active = False
                             self.villager_met = True
                             self.dialog.show("Житель", VILLAGER_YES)
-                        elif e.key == pygame.K_n:  # Игрок нажал Нет
+                        elif e.key == pygame.K_n:
                             self.dialog.active = False
-                            self.villager_refused = True  # <-- ДОБАВИТЬ: Запоминаем отказ
+                            self.villager_refused = True
                             self.dialog.show("Житель", VILLAGER_NO)
                         continue
                     else:
@@ -158,7 +180,6 @@ class Game:
                             self.dialog.active = False
                         continue
 
-                # --- ЛОГИКА ПАУЗЫ ---
                 if e.key == pygame.K_ESCAPE:
                     if self.state == 'playing':
                         self.state = 'paused'
@@ -170,7 +191,6 @@ class Game:
                     if e.key == pygame.K_q:
                         self.running = False
                     continue
-                # --------------------
 
                 if e.key in (pygame.K_SPACE, pygame.K_j):
                     self.player.try_attack()
@@ -183,16 +203,24 @@ class Game:
                 n = self.player.crystals
 
                 if npc.name == "Житель":
-                    if self.villager_refused:  # <-- ДОБАВИТЬ: Если игрок отказал
-                        return  # Просто выходим, диалог не начинается
+                    if self.villager_refused:
+                        return
 
                     if not self.villager_met:
                         self.dialog.show(npc.name, VILLAGER_INTRO, is_choice=True)
+                    elif self.has_key:
+                        self.dialog.show(npc.name, VILLAGER_THANKS)
+                        self.has_key = False
+                        self.quest_completed = True
+                        self.player.upgrade_weapon()
+                        self.floating_texts.append(FloatingText(
+                            self.player.x + self.player.w / 2, self.player.y - 10,
+                            "Стальной клинок!", (255, 215, 0), duration=2000
+                        ))
                     else:
                         self.dialog.show(npc.name, VILLAGER_WAIT)
                     return
 
-                # Твой старый код диалога со Старейшиной
                 if n >= self.TOTAL_CRYSTALS and not self.boss_spawned:
                     self.world.gate_open = True
                     self.boss.dead = False
@@ -206,13 +234,11 @@ class Game:
                     self.dialog.show(npc.name, ELDER_INTRO)
                 return
 
-    # ---------- логика ----------
     def update(self, dt):
         if self.state != 'playing' or self.dialog.active:
             return
         self.player.update(pygame.key.get_pressed(), dt, self.world)
 
-        # подбор кристаллов
         for c in self.crystals:
             if c.collected: continue
             c.update(dt)
@@ -220,13 +246,10 @@ class Game:
                 c.collected = True
                 self.player.crystals += 1
                 self.floating_texts.append(FloatingText(
-                    self.player.x + self.player.w / 2,
-                    self.player.y - 10,
-                    CRYSTAL_MSG,
-                    (200, 240, 255)
+                    self.player.x + self.player.w / 2, self.player.y - 10,
+                    CRYSTAL_MSG, (200, 240, 255)
                 ))
 
-        # подбор зелий
         for p in self.potions:
             if p.collected: continue
             p.update(dt)
@@ -235,13 +258,20 @@ class Game:
                     p.collected = True
                     self.player.hp += 1
                     self.floating_texts.append(FloatingText(
-                        self.player.x + self.player.w / 2,
-                        self.player.y - 10,
-                        POTION_MSG,
-                        (100, 255, 100)
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        POTION_MSG, (100, 255, 100)
                     ))
 
-        # обновление всплывающих текстов
+        if self.key and not self.key.collected:
+            self.key.update(dt)
+            if self.player.rect.colliderect(self.key.rect):
+                self.key.collected = True
+                self.has_key = True
+                self.floating_texts.append(FloatingText(
+                    self.player.x + self.player.w / 2, self.player.y - 10,
+                    KEY_MSG, (255, 215, 0)
+                ))
+
         for ft in self.floating_texts:
             ft.update(dt)
         self.floating_texts = [ft for ft in self.floating_texts if not ft.dead]
@@ -252,7 +282,7 @@ class Game:
             if e.dead: continue
             e.update(self.player, self.world, dt)
             if hb and hb.colliderect(e.rect):
-                e.take_damage(PLAYER_ATTACK_DAMAGE,
+                e.take_damage(self.player.damage,
                               self.player.x + self.player.w / 2,
                               self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
@@ -277,7 +307,7 @@ class Game:
             self.boss.update(self.player, self.world, dt)
             hb = self.player.get_attack_hitbox()
             if hb and hb.colliderect(self.boss.rect):
-                self.boss.take_damage(PLAYER_ATTACK_DAMAGE,
+                self.boss.take_damage(self.player.damage,
                                       self.player.x + self.player.w / 2,
                                       self.player.y + self.player.h / 2)
                 self.player.attack_timer = 0
@@ -298,10 +328,8 @@ class Game:
         if self.boss and self.boss.dead and self.boss_spawned:
             if self.win_delay == 0:
                 self.particles.spawn_burst(
-                    self.boss.x + self.boss.w / 2,
-                    self.boss.y + self.boss.h / 2,
-                    COLOR_BOSS,
-                    count=40
+                    self.boss.x + self.boss.w / 2, self.boss.y + self.boss.h / 2,
+                    COLOR_BOSS, count=40
                 )
                 self.camera.add_shake(10)
                 self.floating_texts.append(FloatingText(
@@ -323,7 +351,6 @@ class Game:
                            self.player.y + self.player.h / 2,
                            self.world.w, self.world.h)
 
-    # ---------- отрисовка ----------
     def draw(self):
         self.screen.fill(COLOR_SKY)
         if self.state == 'title':
@@ -333,6 +360,8 @@ class Game:
 
         self.world.draw(self.screen, self.camera)
         for c in self.crystals: c.draw(self.screen, self.camera)
+        if self.key and not self.key.collected:
+            self.key.draw(self.screen, self.camera)
         for p in self.potions:  p.draw(self.screen, self.camera)
         for n in self.npcs: n.draw(self.screen, self.camera)
 
@@ -350,11 +379,8 @@ class Game:
                 e.draw(self.screen, self.camera)
 
         self.dialog.draw(self.screen)
-
-        # частицы
         self.particles.draw(self.screen, self.camera)
 
-        # всплывающие тексты
         for ft in self.floating_texts:
             ft.draw(self.screen, self.camera)
 
@@ -363,27 +389,24 @@ class Game:
         cy = self.player.y + self.player.h // 2
         in_castle = (2 * TILE <= cx <= 13 * TILE and 2 * TILE <= cy <= 10 * TILE)
         if self.boss_spawned and not self.boss.dead and not in_castle:
-            t = self.font_hint_banner.render(
-                "Замок Морвейна открыт! На северо-запад!", True, (255, 200, 100)
-            )
-            self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 70))
+            self.screen.blit(self.banner_text, (WIDTH // 2 - self.banner_text.get_width() // 2, 70))
 
-        # HUD только в игре (рисуем ДО оверлеев, чтобы пауза перекрывала его)
+        # HUD и мини-карта
         if self.state not in ('win', 'lose', 'paused'):
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
             self.minimap.draw(self.screen, self)
 
-            # --- НОВОЕ: ТРЕКЕР КВЕСТА ---
-            if self.villager_met and not self.villager_refused:
-                self.screen.blit(self.quest_surface, (20, 60))  # <-- ТОЛЬКО ЭТА СТРОЧКА!
+            if (self.villager_met and not self.villager_refused
+                    and not self.has_key and not self.quest_completed):
+                self.screen.blit(self.quest_surface, (20, 60))
 
-        # Красная пульсирующая рамка при низком здоровье (1-2 HP)
+        # Красная пульсирующая рамка
         if self.player.hp <= 2 and self.state == 'playing':
             pulse = int(abs(math.sin(pygame.time.get_ticks() * 0.005)) * 100) + 50
             self.vignette.set_alpha(pulse)
             self.screen.blit(self.vignette, (0, 0))
 
-        # Оверлеи (экраны паузы/смерти/победы) рисуем САМЫМИ ПОСЛЕДНИМИ
+        # Оверлеи
         if self.state == 'win':   self._overlay_win()
         if self.state == 'lose':  self._overlay_lose()
         if self.state == 'paused': self._overlay_pause()
@@ -391,11 +414,9 @@ class Game:
         pygame.display.flip()
 
     def _draw_title(self):
-        fb = self.font_title_big
-        fs = self.font_title_small
-        t = fb.render("Хроники Эльдории", True, (240, 210, 130))
-        s = fs.render("Тень над Священным Пламенем", True, (200, 200, 220))
-        p = fs.render("Нажми любую клавишу", True, (255, 255, 255))
+        t = self.font_title_big.render("Хроники Эльдории", True, (240, 210, 130))
+        s = self.font_title_small.render("Тень над Священным Пламенем", True, (200, 200, 220))
+        p = self.font_title_small.render("Нажми любую клавишу", True, (255, 255, 255))
         self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 200))
         self.screen.blit(s, (WIDTH // 2 - s.get_width() // 2, 280))
         self.screen.blit(p, (WIDTH // 2 - p.get_width() // 2, 400))
@@ -405,42 +426,25 @@ class Game:
             "E — взаимодействие",
             "Собери 3 Кристалла Света, найди Старейшину, победи Морвейна",
         ]):
-            t = fs.render(line, True, (180, 180, 200))
-            self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 460 + i * 30))
+            txt = self.font_title_small.render(line, True, (180, 180, 200))
+            self.screen.blit(txt, (WIDTH // 2 - txt.get_width() // 2, 460 + i * 30))
 
     def _overlay_win(self):
         self.screen.blit(self.overlay_black, (0, 0))
-        fb = self.font_win_big
-        fs = self.font_win_small
-        self.screen.blit(fb.render("ПОБЕДА!", True, (240, 210, 130)),
-                         (WIDTH // 2 - 130, 220))
-        self.screen.blit(fs.render("Священное Пламя возвращено. Эльдория спасена.",
-                                   True, (220, 220, 240)), (WIDTH // 2 - 270, 310))
-        self.screen.blit(fs.render("Нажми R для новой игры", True, (200, 200, 200)),
-                         (WIDTH // 2 - 150, 400))
+        self.screen.blit(self.win_text_big, (WIDTH // 2 - self.win_text_big.get_width() // 2, 220))
+        self.screen.blit(self.win_text_small, (WIDTH // 2 - self.win_text_small.get_width() // 2, 310))
+        self.screen.blit(self.win_text_hint, (WIDTH // 2 - self.win_text_hint.get_width() // 2, 400))
 
     def _overlay_lose(self):
         self.screen.blit(self.overlay_red, (0, 0))
-        fb = self.font_win_big
-        fs = self.font_win_small
-        self.screen.blit(fb.render("ТЫ ПАЛ...", True, (200, 60, 60)),
-                         (WIDTH // 2 - 140, 250))
-        self.screen.blit(fs.render("Нажми R для повторной попытки",
-                                   True, (220, 220, 220)), (WIDTH // 2 - 200, 350))
+        self.screen.blit(self.lose_text_big, (WIDTH // 2 - self.lose_text_big.get_width() // 2, 250))
+        self.screen.blit(self.lose_text_small, (WIDTH // 2 - self.lose_text_small.get_width() // 2, 350))
 
     def _overlay_pause(self):
         self.screen.blit(self.overlay_black, (0, 0))
-        fb = self.font_win_big
-        fs = self.font_win_small
-
-        t = fb.render("ПАУЗА", True, (240, 210, 130))
-        self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 200))
-
-        i1 = fs.render("ESC — продолжить игру", True, (220, 220, 240))
-        i2 = fs.render("Q — выйти из игры", True, (200, 200, 200))
-
-        self.screen.blit(i1, (WIDTH // 2 - i1.get_width() // 2, 300))
-        self.screen.blit(i2, (WIDTH // 2 - i2.get_width() // 2, 350))
+        self.screen.blit(self.pause_text_big, (WIDTH // 2 - self.pause_text_big.get_width() // 2, 200))
+        self.screen.blit(self.pause_text_1, (WIDTH // 2 - self.pause_text_1.get_width() // 2, 300))
+        self.screen.blit(self.pause_text_2, (WIDTH // 2 - self.pause_text_2.get_width() // 2, 350))
 
     # ---------- цикл ----------
     async def run(self):

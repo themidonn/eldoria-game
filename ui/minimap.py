@@ -22,15 +22,15 @@ class MiniMap:
                 t = world.tiles[ty][tx]
                 color = None
                 if t == GRASS:
-                    color = (60, 100, 60)     # Трава (зеленая)
+                    color = (60, 100, 60)
                 elif t == DARK_FLOOR:
-                    color = (70, 40, 40)      # Пол замка (темно-красный)
+                    color = (70, 40, 40)
                 elif t == HOUSE:
                     color = (150, 80, 50)
                 elif t == WATER:
-                    color = (40, 80, 140)     # Вода (синяя)
+                    color = (40, 80, 140)
                 elif t == STONE:
-                    color = (100, 100, 110)   # Стены замка (серая)
+                    color = (100, 100, 110)
 
                 if color:
                     pygame.draw.rect(self.bg, color, (tx * self.scale, ty * self.scale, self.scale, self.scale))
@@ -38,9 +38,31 @@ class MiniMap:
         # Рамка вокруг карты
         pygame.draw.rect(self.bg, (200, 180, 120), (0, 0, self.w, self.h), 2)
 
+        # --- КЭШИРУЕМ ЗОНУ ПОИСКА КЛЮЧА ---
+        # Размеры и позиция зоны не меняются, поэтому создаем их один раз
+        zone_x = 75
+        zone_y = 20
+        zone_w = 95 - 75 + 1
+        zone_h = 45 - 20 + 1
+
+        mx = self.x + zone_x * self.scale
+        my = self.y + zone_y * self.scale
+        mw = zone_w * self.scale
+        mh = zone_h * self.scale
+
+        self.zone_rect = pygame.Rect(mx, my, mw, mh)
+        self.zone_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
+        self.zone_surf.fill((255, 255, 255, 50))
+
     def draw(self, screen, game):
         # Рисуем закэшированный фон
         screen.blit(self.bg, (self.x, self.y))
+
+        # Показываем зону, только если квест взят и ещё не выполнен
+        if (game.villager_met and not game.villager_refused
+                and not game.has_key and not game.quest_completed):
+            screen.blit(self.zone_surf, self.zone_rect.topleft)
+            pygame.draw.rect(screen, (255, 255, 255), self.zone_rect, 1)
 
         # Вспомогательная функция: перевод координат мира в координаты мини-карты
         def to_mini(wx, wy):

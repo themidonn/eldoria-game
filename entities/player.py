@@ -11,6 +11,12 @@ class Player:
         self.attack_cooldown = 0
         self.invuln = 0
         self.crystals = 0
+        self.damage = PLAYER_ATTACK_DAMAGE
+        self.weapon_upgraded = False
+
+    def upgrade_weapon(self):
+        self.damage = 2
+        self.weapon_upgraded = True
 
     @property
     def rect(self):
@@ -74,5 +80,6 @@ class Player:
             hb = self.get_attack_hitbox()
             if hb:
                 sr = hb.move(int(-cam.x), int(-cam.y))
-                pygame.draw.rect(screen, COLOR_SWORD, sr, border_radius=6)
+                sword_color = COLOR_SWORD_UPGRADED if self.weapon_upgraded else COLOR_SWORD
+                pygame.draw.rect(screen, sword_color, sr, border_radius=6)
                 pygame.draw.rect(screen, (150, 150, 160), sr, 2, border_radius=6)

@@ -28,6 +28,8 @@ COLOR_SKY         = (30, 30, 40)
 COLOR_HOUSE       = (139, 69, 19) # Коричневый для стен
 COLOR_ROOF        = (100, 40, 30) # Темно-красный для крыши
 
+COLOR_SWORD_UPGRADED = (255, 215, 0)  # Золотой клинок
+
 COLOR_PLAYER   = (60, 140, 220)
 COLOR_SWORD    = (220, 220, 220)
 COLOR_SLIME    = (100, 200, 100)

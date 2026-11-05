@@ -57,10 +57,27 @@ class Slime:
         if self.dead:
             return
         sx, sy = int(self.x - cam.x), int(self.y - cam.y)
-        color = (255, 100, 100) if self.hit_flash > 0 else COLOR_SLIME
-        pygame.draw.ellipse(screen, color, (sx, sy+4, self.w, self.h-4))
-        pygame.draw.ellipse(screen, COLOR_SLIME_D, (sx, sy+4, self.w, self.h-4), 2)
-        pygame.draw.circle(screen, (255, 255, 255), (sx+8, sy+12), 3)
-        pygame.draw.circle(screen, (255, 255, 255), (sx+self.w-8, sy+12), 3)
-        pygame.draw.circle(screen, (0, 0, 0), (sx+8, sy+12), 1)
-        pygame.draw.circle(screen, (0, 0, 0), (sx+self.w-8, sy+12), 1)
+
+        # Определяем цвет в зависимости от силы слизня
+        if self.max_hp >= 3:
+            # Элитный слизень (темно-зеленый)
+            base_color = (60, 130, 60)
+            outline_color = (30, 70, 30)
+        else:
+            # Обычный слизень (светло-зеленый)
+            base_color = COLOR_SLIME
+            outline_color = COLOR_SLIME_D
+
+        # Если получает урон — мигает красным
+        color = (255, 100, 100) if self.hit_flash > 0 else base_color
+
+        pygame.draw.ellipse(screen, color, (sx, sy + 4, self.w, self.h - 4))
+        pygame.draw.ellipse(screen, outline_color, (sx, sy + 4, self.w, self.h - 4), 2)
+
+        # Глаза (белки)
+        pygame.draw.circle(screen, (255, 255, 255), (sx + 8, sy + 12), 3)  # <-- ВЕРНУЛИ ЛЕВЫЙ ГЛАЗ
+        pygame.draw.circle(screen, (255, 255, 255), (sx + self.w - 8, sy + 12), 3)
+
+        # Зрачки
+        pygame.draw.circle(screen, (0, 0, 0), (sx + 8, sy + 12), 1)
+        pygame.draw.circle(screen, (0, 0, 0), (sx + self.w - 8, sy + 12), 1)

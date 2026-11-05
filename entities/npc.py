@@ -8,6 +8,8 @@ class NPC:
         self.name = name
         self.color = color
         self.font = pygame.font.SysFont('arial', 12)
+        # Кэшируем отрендеренный текст имени один раз
+        self.name_surface = self.font.render(self.name, True, (255, 255, 255))
 
     @property
     def rect(self):
@@ -19,5 +21,6 @@ class NPC:
         pygame.draw.rect(screen, (30, 30, 30), (sx, sy, self.w, self.h), 2, border_radius=6)
         pygame.draw.circle(screen, (0, 0, 0), (sx+9, sy+12), 2)
         pygame.draw.circle(screen, (0, 0, 0), (sx+self.w-9, sy+12), 2)
-        t = self.font.render(self.name, True, (255, 255, 255))
-        screen.blit(t, (sx + self.w//2 - t.get_width()//2, sy - 14))
+        # Используем готовую поверхность вместо рендера каждый кадр
+        screen.blit(self.name_surface,
+                    (sx + self.w//2 - self.name_surface.get_width()//2, sy - 14))
