@@ -122,6 +122,7 @@ class Game:
         self.dungeon = None
         self.dungeon_bats = []
         self.dungeon_chest = None
+        self.dungeon_lore_stones = []
         self.current_map = self.main_world
         self.level = 1
         self.saved_position = None
@@ -246,6 +247,21 @@ class Game:
                 if self.dungeon_chest:
                     break
 
+        # --- Лор-камни подземелья (только при первом входе) ---
+        if not self.dungeon_lore_stones:
+            lore_positions = [
+                (7,  20, "Камень у входа",     LORE_DUNGEON_ENTRY),
+                (15, 7,  "Камень с фреской",   LORE_DUNGEON_MIDDLE),
+                (32, 20, "Камень у алтаря",    LORE_DUNGEON_DEEP),
+            ]
+            for tx, ty, title, text in lore_positions:
+                px = tx * TILE + TILE // 2
+                py = ty * TILE + TILE // 2
+                if self.dungeon.is_walkable_px(px, py):
+                    self.dungeon_lore_stones.append(
+                        LoreStone(tx * TILE, ty * TILE, title, text)
+                    )
+
     def exit_dungeon(self):
         self.current_map = self.main_world
         self.level = 1
@@ -316,12 +332,13 @@ class Game:
     def _interact(self):
         if self._try_use_stairs():
             return
-        if self.level != 1:
-            return
 
-        if self._try_read_lore_stone():
-            return
-        self._try_talk_to_npc()
+        if self.level == 1:
+            if self._try_read_lore_stone():
+                return
+            self._try_talk_to_npc()
+        else:
+            self._try_read_dungeon_lore()
 
     def _try_use_stairs(self):
         """Проверяет, стоит ли игрок на лестнице. Возвращает True, если сработало."""
@@ -338,6 +355,15 @@ class Game:
         if tile == STAIRS_UP and self.level == 2:
             self.exit_dungeon()
             return True
+        return False
+
+    def _try_read_dungeon_lore(self):
+        """Проверяет лор-камни в подземелье. Возвращает True, если прочитали."""
+        for stone in self.dungeon_lore_stones:
+            if self.player.rect.inflate(40, 40).colliderect(stone.rect):
+                self.dialog.show(stone.title, stone.text)
+                stone.is_read = True
+                return True
         return False
 
     def _try_read_lore_stone(self):
@@ -613,7 +639,11 @@ class Game:
             else: e.draw(self.screen, self.camera)
 
     def _draw_level_2(self):
-        # Сундук — под всеми (стоит на полу, не двигается)
+        # Лор-камни (на полу, как декор)
+        for stone in self.dungeon_lore_stones:
+            stone.draw(self.screen, self.camera)
+
+        # Сундук
         if self.dungeon_chest:
             self.dungeon_chest.draw(self.screen, self.camera)
 

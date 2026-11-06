@@ -32,7 +32,9 @@ class Bat:
     # ============================================================
     @property
     def rect(self):
-        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+        # Хитбокс включает крылья: они расширяют тело на ±4 px по X.
+        # Без этого урон не срабатывает, когда мышь касается игрока боком.
+        return pygame.Rect(int(self.x) - 4, int(self.y), self.w + 8, self.h)
 
     # ============================================================
     #   ЛОГИКА
@@ -65,7 +67,7 @@ class Bat:
         dy = player.y - self.y
         dist = (dx * dx + dy * dy) ** 0.5
 
-        if 30 < dist < 350:
+        if 1 < dist < 350:
             dx, dy = dx / dist, dy / dist
             s = self.speed * (dt / 16.67)
             sine_offset = math.sin(self.bob_time * 3) * 1.5 * (dt / 16.67)

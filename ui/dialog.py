@@ -32,8 +32,8 @@ class Dialog:
         self.font_hint    = pygame.font.SysFont('arial', 18, bold=True)
 
         # --- Бокс (кэш) ---
-        box_w, box_h = WIDTH - 80, 160
-        self.box_rect = pygame.Rect(40, HEIGHT - 180, box_w, box_h)
+        box_w, box_h = WIDTH - 80, 210
+        self.box_rect = pygame.Rect(40, HEIGHT - 230, box_w, box_h)
         self.box_surface = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
         self.box_surface.fill((20, 20, 30, 230))
 
@@ -98,12 +98,21 @@ class Dialog:
 
         # --- Группировка по 3 строки + рендер в Surface ---
         rendered_pages = []
+        line_height = self.font_text.get_linesize()
+
         for i in range(0, len(lines), 3):
-            page_lines = lines[i:i + 3]
-            page_text = "\n".join(page_lines)
-            # pygame.font умеет рисовать многострочный текст с \n
-            surface = self.font_text.render(page_text, True, COLOR_UI_TEXT)
-            rendered_pages.append(surface)
+            page_lines = lines[i:i+3]
+
+            # Создаём пустую поверхность под всю страницу
+            surf_h = line_height * len(page_lines)
+            page_surf = pygame.Surface((max_w, surf_h), pygame.SRCALPHA)
+
+            # Рендерим каждую строку отдельно и блитим на страницу
+            for j, line in enumerate(page_lines):
+                line_surf = self.font_text.render(line, True, COLOR_UI_TEXT)
+                page_surf.blit(line_surf, (0, j * line_height))
+
+            rendered_pages.append(page_surf)
 
         return rendered_pages
 
