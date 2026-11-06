@@ -25,6 +25,7 @@ from entities.key import Key
 from entities.potion import Potion
 from entities.boss import Boss
 from entities.lore_stone import LoreStone
+from entities.bat import Bat
 from ui.hud import HUD
 from ui.dialog import Dialog
 from ui.floating_text import FloatingText
@@ -118,6 +119,7 @@ class Game:
     def _reset(self):
         self.main_world = World()
         self.dungeon = None
+        self.dungeon_bats = []
         self.current_map = self.main_world
         self.level = 1
         self.saved_position = None
@@ -220,6 +222,16 @@ class Game:
         self.camera = Camera()
         self.particles = ParticleManager()
         self.floating_texts = []
+
+        # --- Летучие мыши (только на проходимых клетках!) ---
+        if not self.dungeon_bats:
+            # Безопасные позиции: не внутри колонн 2×2
+            bat_positions = [(8, 8), (13, 13), (18, 8), (23, 18), (33, 13)]
+            for tx, ty in bat_positions:
+                px = tx * TILE + TILE // 2
+                py = ty * TILE + TILE // 2
+                if self.dungeon.is_walkable_px(px, py):
+                    self.dungeon_bats.append(Bat(tx * TILE, ty * TILE))
 
     def exit_dungeon(self):
         self.current_map = self.main_world
@@ -385,7 +397,7 @@ class Game:
         if self.level == 1:
             self._update_level_1(dt)
         else:
-            self.dungeon.update(dt)
+            self._update_level_2(dt)
 
         self._update_common(dt)
 
@@ -480,6 +492,43 @@ class Game:
                 if self.win_delay >= 1500:
                     self.state = 'win'
 
+    def _update_level_2(self, dt):
+        """Логика подземелья: обновление карты, мышей, боя."""
+        self.dungeon.update(dt)
+
+        hb = self.player.get_attack_hitbox()
+        for bat in self.dungeon_bats:
+            if bat.dead:
+                continue
+            bat.update(self.player, self.dungeon, dt)
+
+            # Удар по мыши
+            if hb and hb.colliderect(bat.rect):
+                bat.take_damage(self.player.damage,
+                                self.player.x + self.player.w / 2,
+                                self.player.y + self.player.h / 2)
+                self.player.attack_timer = 0
+                hb = None
+                self.camera.add_shake(2)
+                self.floating_texts.append(FloatingText(
+                    bat.x + bat.w / 2, bat.y - 10, "-1", (255, 255, 100), duration=600
+                ))
+
+            # Контактный урон от мыши
+            if not bat.dead and bat.rect.colliderect(self.player.rect):
+                if self.player.take_damage(1):
+                    self.camera.add_shake(5)
+                    self.floating_texts.append(FloatingText(
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        "-1 HP", (255, 100, 100)
+                    ))
+
+            # Смерть мыши — фиолетовые частицы
+            if bat.dead:
+                self.particles.spawn_burst(
+                    bat.x + bat.w / 2, bat.y + bat.h / 2, (80, 60, 120)
+                )
+
     def _update_common(self, dt):
         for ft in self.floating_texts:
             ft.update(dt)
@@ -535,7 +584,16 @@ class Game:
             else: e.draw(self.screen, self.camera)
 
     def _draw_level_2(self):
-        self.player.draw(self.screen, self.camera)
+        # Мыши под игроком
+        ents = [(b.y + b.h, b) for b in self.dungeon_bats if not b.dead]
+        ents.append((self.player.y + self.player.h, self.player))
+        ents.sort(key=lambda p: p[0])
+
+        for _, e in ents:
+            if e is self.player:
+                self.player.draw(self.screen, self.camera)
+            else:
+                e.draw(self.screen, self.camera)
 
     def _draw_hints(self):
         if self.state != 'playing' or self.dialog.active:
