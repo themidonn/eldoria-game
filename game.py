@@ -109,6 +109,7 @@ class Game:
 
         self.hint_enter = self._make_hint("E — войти в подземелье")
         self.hint_exit = self._make_hint("E — выйти на поверхность")
+        self.hint_chest = self._make_hint("E — открыть сундук")
 
     def _make_hint(self, text):
         text_surf = self.font_hint_banner.render(text, True, (255, 255, 150))
@@ -278,9 +279,6 @@ class Game:
     #   СОХРАНЕНИЕ / ЗАГРУЗКА
     # ============================================================
     def save_progress(self):
-        """Сохраняет текущее состояние в save.py."""
-        # Не сохраняем с титульника, победы/поражения (сейв уже удалён)
-        # и в момент, когда self.player ещё не существует.
         if not hasattr(self, 'player'):
             return
         if self.state not in ('playing', 'paused'):
@@ -338,7 +336,6 @@ class Game:
             self._has_save = True
 
     def load_progress(self):
-        """Загружает сохранение. Если сейва нет — начинает новую игру."""
         data = save.read()
         if not data:
             self._reset()
@@ -346,7 +343,6 @@ class Game:
 
         self._reset()
 
-        # --- Player ---
         p = data.get('player', {})
         self.player.max_hp = max(1, int(p.get('max_hp', self.player.max_hp)))
         self.player.hp = max(1, min(self.player.max_hp, int(p.get('hp', self.player.max_hp))))
@@ -354,7 +350,6 @@ class Game:
         self.player.weapon_upgraded = bool(p.get('weapon_upgraded', False))
         self.player.crystals = int(p.get('crystals', 0))
 
-        # --- Progress ---
         pr = data.get('progress', {})
         self.boss_spawned = bool(pr.get('boss_spawned', False))
         self.villager_met = bool(pr.get('villager_met', False))
@@ -363,7 +358,6 @@ class Game:
         self.quest_completed = bool(pr.get('quest_completed', False))
         self.lore_reward_given = bool(pr.get('lore_reward_given', False))
 
-        # --- World ---
         w = data.get('world', {})
         self.main_world.gate_open = bool(w.get('gate_open', False))
 
@@ -388,7 +382,6 @@ class Game:
             if 0 <= i < len(self.lore_stones):
                 self.lore_stones[i].is_read = True
 
-        # --- Boss (Морвейн) ---
         b = data.get('boss', {})
         if self.boss:
             self.boss.dead = bool(b.get('dead', True))
@@ -396,7 +389,6 @@ class Game:
             self.boss.phase = b.get('phase', 'idle')
             self.boss.charge_timer = float(b.get('charge_timer', 3.0))
 
-        # --- Dungeon ---
         d = data.get('dungeon', {})
         if d.get('has_dungeon', False):
             self._ensure_dungeon()
@@ -414,12 +406,10 @@ class Game:
             if self.dungeon_boss and d.get('boss_dead', False):
                 self.dungeon_boss.dead = True
 
-        # --- Saved position (куда вернуться из подземелья) ---
         sp = data.get('saved_position')
         if sp and isinstance(sp, (list, tuple)) and len(sp) == 2:
             self.saved_position = (float(sp[0]), float(sp[1]))
 
-        # --- Level and position ---
         level = int(data.get('level', 1))
         if level == 2 and self.dungeon is not None:
             self.current_map = self.dungeon
@@ -444,7 +434,6 @@ class Game:
                 self._handle_keydown(e.key)
 
     def _handle_keydown(self, key):
-        # --- Титульный экран ---
         if self.state == 'title':
             if self._has_save:
                 if key == pygame.K_RETURN:
@@ -455,13 +444,11 @@ class Game:
                     self._has_save = False
                     self._reset()
                     self.state = 'playing'
-                # остальные клавиши игнорируются
             else:
                 self._reset()
                 self.state = 'playing'
             return
 
-        # --- Победа / поражение ---
         if self.state in ('win', 'lose'):
             if key == pygame.K_r:
                 save.delete()
@@ -470,12 +457,10 @@ class Game:
                 self.state = 'playing'
             return
 
-        # --- Диалог ---
         if self.dialog.active:
             self._handle_dialog_input(key)
             return
 
-        # --- Пауза ---
         if key == pygame.K_ESCAPE:
             self.state = 'paused' if self.state == 'playing' else 'playing'
             return
@@ -488,7 +473,6 @@ class Game:
                 self.save_progress()
             return
 
-        # --- Ручное сохранение ---
         if key == pygame.K_F5:
             self.save_progress()
             self.floating_texts.append(FloatingText(
@@ -497,7 +481,6 @@ class Game:
             ))
             return
 
-        # --- Атака / взаимодействие ---
         if key in (pygame.K_SPACE, pygame.K_j):
             self.player.try_attack()
         elif key == pygame.K_e:
@@ -925,22 +908,33 @@ class Game:
         if self.state != 'playing' or self.dialog.active:
             return
 
+        # --- Подсказки лестниц (над игроком) ---
         cx = int((self.player.x + self.player.w / 2) // TILE)
         cy = int((self.player.y + self.player.h / 2) // TILE)
-        if not (0 <= cy < self.world.h and 0 <= cx < self.world.w):
-            return
+        if 0 <= cy < self.world.h and 0 <= cx < self.world.w:
+            tile = self.world.tiles[cy][cx]
+            hint = None
+            if tile == STAIRS_DOWN and self.level == 1:
+                hint = self.hint_enter
+            elif tile == STAIRS_UP and self.level == 2:
+                hint = self.hint_exit
 
-        tile = self.world.tiles[cy][cx]
-        hint = None
-        if tile == STAIRS_DOWN and self.level == 1:
-            hint = self.hint_enter
-        elif tile == STAIRS_UP and self.level == 2:
-            hint = self.hint_exit
+            if hint:
+                hx = int(self.player.x - self.camera.x + self.player.w / 2) - hint.get_width() // 2
+                hy = int(self.player.y - self.camera.y) - self.HINT_OFFSET_Y
+                self.screen.blit(hint, (hx, hy))
 
-        if hint:
-            hx = int(self.player.x - self.camera.x + self.player.w / 2) - hint.get_width() // 2
-            hy = int(self.player.y - self.camera.y) - self.HINT_OFFSET_Y
-            self.screen.blit(hint, (hx, hy))
+        # --- Подсказка сундука (над сундуком, если босс мёртв и игрок рядом) ---
+        if (self.level == 2
+                and self.dungeon_chest
+                and not self.dungeon_chest.opened
+                and self.dungeon_boss
+                and self.dungeon_boss.dead
+                and self.player.rect.inflate(40, 40).colliderect(self.dungeon_chest.rect)):
+            chest = self.dungeon_chest
+            hx = int(chest.x - self.camera.x + chest.w // 2) - self.hint_chest.get_width() // 2
+            hy = int(chest.y - self.camera.y) - self.hint_chest.get_height() - 4
+            self.screen.blit(self.hint_chest, (hx, hy))
 
     def _draw_ui(self):
         self.dialog.draw(self.screen)
