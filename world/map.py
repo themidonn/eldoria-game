@@ -1,8 +1,9 @@
 """
 world/map.py — Главный мир (уровень 1).
 
-Большая карта 100×75 тайлов: лес, озеро, замок на северо-западе,
-деревня в центре, колодец-вход в подземелье.
+Большая карта 180×130 тайлов: лес, озеро, замок на северо-западе,
+деревня в центре, колодец-вход в подземелье, горная гряда на севере
+(пики, перевалы, долины) и болото на юго-западе.
 
 Генерация детерминирована (random.Random(7)) — карта
 всегда одинаковая, чтобы игрок мог ориентироваться.
@@ -19,12 +20,14 @@ class World:
     #   КОНСТАНТЫ
     # ============================================================
     # Размер карты в тайлах
-    WIDTH_TILES  = 100
-    HEIGHT_TILES = 75
+    WIDTH_TILES  = 180
+    HEIGHT_TILES = 130
 
     # Количество деревьев (случайно раскиданы по траве)
-    TREE_COUNT = 350
+    TREE_COUNT = 1100
     RANDOM_SEED = 7               # фиксированный seed → одинаковая карта
+    MOUNTAIN_SEED = 8
+    SWAMP_SEED = 9
 
     # --- Озеро (юго-восток) ---
     LAKE_CENTER_X = 72
@@ -47,6 +50,18 @@ class World:
         (55, 57, 50, 53),   # дом 3 (снизу)
     ]
     WELL_X, WELL_Y = 60, 55       # колодец — вход в подземелье
+
+    # --- Горы (север) ---
+    # Естественная гряда: пики (стена), перевалы (проход снизу),
+    # долины (широкий проход). Не более 3 горных блоков подряд —
+    # гарантия, что стена не станет непроходимой.
+    MOUNTAIN_X_MIN, MOUNTAIN_X_MAX = 20, 175
+    MOUNTAIN_Y_MIN, MOUNTAIN_Y_MAX = 2, 15
+    MOUNTAIN_MAX_BLOCKS_BEFORE_VALLEY = 3
+
+    # --- Болото (юго-запад) ---
+    SWAMP_X_MIN, SWAMP_X_MAX = 5, 50
+    SWAMP_Y_MIN, SWAMP_Y_MAX = 85, 125
 
     # Зоны, которые нужно расчистить под ключевые объекты
     CLEAR_ZONES = [
@@ -71,10 +86,13 @@ class World:
     #   ГЕНЕРАЦИЯ
     # ============================================================
     def generate(self):
-        """Полная генерация карты: границы → деревья → озеро → замок → деревня → очистка."""
+        """Полная генерация: границы → деревья → горы → болото →
+        озеро → замок → деревня → очистка."""
         self.tiles = [[GRASS for _ in range(self.w)] for _ in range(self.h)]
         self._generate_borders()
         self._generate_trees()
+        self._generate_mountains()
+        self._generate_swamp()
         self._generate_lake()
         self._generate_castle()
         self._generate_village()
@@ -98,13 +116,87 @@ class World:
             if self.tiles[ty][tx] == GRASS:
                 self.tiles[ty][tx] = TREE
 
+    def _generate_mountains(self):
+        """Естественная горная гряда с пиками, перевалами и долинами.
+
+        Идём по X слева направо. Для каждого блока выбираем:
+        - Пик (55%): полная стена y=2..15, ширина 2..4
+        - Перевал (25%): гора сверху y=2..(2+4..8), снизу — проход,
+          ширина 1..3
+        - Долина (20%): полный проход y=2..15, ширина 3..6
+
+        Гарантия проходимости: не более 3 горных блоков подряд
+        (пик/перевал), затем принудительная долина.
+        """
+        rng = random.Random(self.MOUNTAIN_SEED)
+
+        x = self.MOUNTAIN_X_MIN
+        blocks_since_valley = 0
+
+        while x <= self.MOUNTAIN_X_MAX:
+            force_valley = (blocks_since_valley
+                            >= self.MOUNTAIN_MAX_BLOCKS_BEFORE_VALLEY)
+            roll = rng.random()
+
+            if not force_valley and roll < 0.55:
+                # --- Пик: полная стена ---
+                width = rng.randint(2, 4)
+                for dx in range(width):
+                    if x + dx > self.MOUNTAIN_X_MAX:
+                        break
+                    for ty in range(self.MOUNTAIN_Y_MIN,
+                                    self.MOUNTAIN_Y_MAX + 1):
+                        self.tiles[ty][x + dx] = MOUNTAIN
+                x += width
+                blocks_since_valley += 1
+
+            elif not force_valley and roll < 0.80:
+                # --- Перевал: гора сверху, проход снизу ---
+                width = rng.randint(1, 3)
+                peak_h = rng.randint(4, 8)
+                for dx in range(width):
+                    if x + dx > self.MOUNTAIN_X_MAX:
+                        break
+                    for ty in range(self.MOUNTAIN_Y_MIN,
+                                    self.MOUNTAIN_Y_MIN + peak_h + 1):
+                        if ty <= self.MOUNTAIN_Y_MAX:
+                            self.tiles[ty][x + dx] = MOUNTAIN
+                x += width
+                blocks_since_valley += 1
+
+            else:
+                # --- Долина: широкий проход ---
+                gap = rng.randint(3, 6)
+                x += gap
+                blocks_since_valley = 0
+
+    def _generate_swamp(self):
+        """Болото на юго-западе с рваными краями (неровный круг)."""
+        rng = random.Random(self.SWAMP_SEED)
+        cx = (self.SWAMP_X_MIN + self.SWAMP_X_MAX) / 2
+        cy = (self.SWAMP_Y_MIN + self.SWAMP_Y_MAX) / 2
+        max_r = min(self.SWAMP_X_MAX - self.SWAMP_X_MIN,
+                    self.SWAMP_Y_MAX - self.SWAMP_Y_MIN) / 2
+
+        for ty in range(self.SWAMP_Y_MIN, self.SWAMP_Y_MAX + 1):
+            for tx in range(self.SWAMP_X_MIN, self.SWAMP_X_MAX + 1):
+                dx = tx - cx
+                dy = ty - cy
+                dist = (dx * dx + dy * dy) ** 0.5
+
+                if dist < max_r * 0.6:
+                    self.tiles[ty][tx] = SWAMP
+                elif dist < max_r * 0.9 and rng.random() < 0.7:
+                    self.tiles[ty][tx] = SWAMP
+                elif dist < max_r and rng.random() < 0.3:
+                    self.tiles[ty][tx] = SWAMP
+
     def _generate_lake(self):
         """Озеро круглой формы с центром в LAKE_CENTER_X/Y."""
         for ty in range(self.LAKE_CENTER_Y - self.LAKE_RADIUS - 2,
                         self.LAKE_CENTER_Y + self.LAKE_RADIUS + 2):
             for tx in range(self.LAKE_CENTER_X - self.LAKE_RADIUS - 2,
                             self.LAKE_CENTER_X + self.LAKE_RADIUS + 2):
-                # Сравниваем квадраты расстояний — без корня (быстрее)
                 dx = tx - self.LAKE_CENTER_X
                 dy = ty - self.LAKE_CENTER_Y
                 if dx * dx + dy * dy < self.LAKE_RADIUS * self.LAKE_RADIUS:
@@ -114,29 +206,24 @@ class World:
         """Замок с ареной босса: стены по периметру, пол внутри, ворота в стене."""
         for ty in range(self.CASTLE_Y_MIN, self.CASTLE_Y_MAX + 1):
             for tx in range(self.CASTLE_X_MIN, self.CASTLE_X_MAX + 1):
-                # Стены — верхняя/нижняя/левая/правая
                 if ty in (self.CASTLE_Y_MIN, self.CASTLE_Y_MAX) or \
                    tx in (self.CASTLE_X_MIN, self.CASTLE_X_MAX):
                     self.tiles[ty][tx] = STONE
                 else:
                     self.tiles[ty][tx] = DARK_FLOOR
 
-        # Ворота в нижней стене
         self.tiles[self.GATE_Y][self.GATE_X] = GATE
 
     def _generate_village(self):
         """Деревня: расчистка площади, дома, колодец."""
-        # Расчищаем площадь от деревьев
         self.clear_area(self.VILLAGE_CENTER_X, self.VILLAGE_CENTER_Y,
                         self.VILLAGE_CLEAR_RADIUS)
 
-        # Дома
         for tx_min, tx_max, ty_min, ty_max in self.HOUSES:
             for ty in range(ty_min, ty_max + 1):
                 for tx in range(tx_min, tx_max + 1):
                     self.tiles[ty][tx] = HOUSE
 
-        # Колодец — вход в подземелье
         self.tiles[self.WELL_Y][self.WELL_X] = STAIRS_DOWN
 
     def _clear_key_zones(self):
@@ -155,7 +242,7 @@ class World:
     #   КОЛЛИЗИИ
     # ============================================================
     def is_walkable_px(self, px, py):
-        """Проходим ли пиксель? Ворота зависят от gate_open."""
+        """Проходим ли пиксель? Горы — нет, болото — да."""
         tx, ty = int(px // TILE), int(py // TILE)
         if tx < 0 or ty < 0 or tx >= self.w or ty >= self.h:
             return False
@@ -163,7 +250,7 @@ class World:
         t = self.tiles[ty][tx]
         if t == GATE:
             return self.gate_open
-        return t in (GRASS, FLOOR, DARK_FLOOR, STAIRS_DOWN, STAIRS_UP)
+        return t in (GRASS, FLOOR, DARK_FLOOR, STAIRS_DOWN, STAIRS_UP, SWAMP)
 
     def is_walkable_rect(self, x, y, w, h):
         """Проходим ли весь прямоугольник (проверяет все перекрытые тайлы)?"""
@@ -215,10 +302,13 @@ class World:
             self._draw_well(screen, sx, sy, r)
         elif t == STAIRS_UP:
             self._draw_stairs_up(screen, sx, sy, r)
+        elif t == MOUNTAIN:
+            self._draw_mountain(screen, r)
+        elif t == SWAMP:
+            self._draw_swamp(screen, sx, sy, r)
 
     def _draw_grass(self, screen, sx, sy, r):
         pygame.draw.rect(screen, COLOR_GRASS, r)
-        # Две «травинки» для текстуры
         pygame.draw.rect(screen, COLOR_GRASS_DARK, (sx + 8, sy + 8, 4, 4))
         pygame.draw.rect(screen, COLOR_GRASS_DARK, (sx + 22, sy + 18, 4, 4))
 
@@ -239,11 +329,8 @@ class World:
         pygame.draw.rect(screen, (60, 60, 70), r, 2)
 
     def _draw_house(self, screen, sx, sy, r):
-        # Стены
         pygame.draw.rect(screen, COLOR_HOUSE, r)
-        # Крыша (верхняя половина)
         pygame.draw.rect(screen, COLOR_ROOF, (sx, sy, TILE, TILE // 2))
-        # Обводка
         pygame.draw.rect(screen, (40, 20, 10), r, 1)
 
     def _draw_gate(self, screen, sx, sy, r):
@@ -272,3 +359,22 @@ class World:
             (sx + TILE // 2 - 6, sy + 18),
             (sx + TILE // 2 + 6, sy + 18),
         ])
+
+    def _draw_mountain(self, screen, r):
+        """Горный тайл: серый камень с тёмными трещинами."""
+        pygame.draw.rect(screen, COLOR_MOUNTAIN, r)
+        pygame.draw.rect(screen, COLOR_MOUNTAIN_DARK, r, 2)
+        sx, sy = r[0], r[1]
+        pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
+                         (sx + 10, sy + 12), (sx + 18, sy + 22), 2)
+        pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
+                         (sx + 18, sy + 22), (sx + 14, sy + 34), 2)
+        pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
+                         (sx + 26, sy + 8), (sx + 30, sy + 18), 2)
+
+    def _draw_swamp(self, screen, sx, sy, r):
+        """Болото: тёмно-зелёная вода с пузырями."""
+        pygame.draw.rect(screen, COLOR_SWAMP, r)
+        pygame.draw.circle(screen, COLOR_SWAMP_BUBBLE, (sx + 10, sy + 12), 3)
+        pygame.draw.circle(screen, COLOR_SWAMP_BUBBLE, (sx + 26, sy + 24), 2)
+        pygame.draw.circle(screen, COLOR_SWAMP_BUBBLE, (sx + 18, sy + 32), 2)
