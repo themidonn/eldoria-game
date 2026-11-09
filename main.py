@@ -2,7 +2,10 @@
 main.py — точка входа в игру.
 
 ВАЖНО: порядок действий нарушать нельзя.
-1. pygame.init() + display.set_mode() — инициализация Pygame.
+1. pygame.display.init() + pygame.font.init() — инициализация Pygame.
+   (pygame.init() НЕ используем: в Pygbag он падает на mixer.init()
+   с ошибкой SDL_OpenAudioDevice / Mix_OpenAudioDevice. Звук в игре
+   пока не используется, поэтому микшер не инициализируем.)
 2. Только ПОСЛЕ этого можно импортировать Game.
 
 Почему так: в WebAssembly (Pygbag) импорт игровых модулей
@@ -20,7 +23,8 @@ from settings import WIDTH, HEIGHT
 # ============================================================
 #   ИНИЦИАЛИЗАЦИЯ PYGAME (до импорта Game!)
 # ============================================================
-pygame.init()
+pygame.display.init()
+pygame.font.init()
 pygame.display.set_mode((WIDTH, HEIGHT))
 
 
