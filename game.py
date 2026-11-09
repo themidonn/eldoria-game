@@ -62,13 +62,13 @@ class Game:
         self._has_save = save.exists()
 
     def _init_fonts(self):
-        self.font_title_big = pygame.font.Font('arial', 56)
-        self.font_title_small = pygame.font.Font('arial', 24)
-        self.font_win_big = pygame.font.Font('arial', 64)
-        self.font_win_small = pygame.font.Font('arial', 26)
-        self.font_hint_banner = pygame.font.Font('arial', 18)
-        self.font_quest = pygame.font.Font('arial', 16)
-        self.font_intro = pygame.font.Font('arial', 28)
+        self.font_title_big = pygame.font.Font(None, 56)
+        self.font_title_small = pygame.font.Font(None, 24)
+        self.font_win_big = pygame.font.Font(None, 64)
+        self.font_win_small = pygame.font.Font(None, 26)
+        self.font_hint_banner = pygame.font.Font(None, 18)
+        self.font_quest = pygame.font.Font(None, 16)
+        self.font_intro = pygame.font.Font(None, 28)
 
     def _make_quest_surface(self, text):
         q_text = self.font_quest.render(text, True, (255, 200, 100))

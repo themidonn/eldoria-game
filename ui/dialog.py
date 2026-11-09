@@ -27,9 +27,9 @@ class Dialog:
         self.is_choice = False
 
         # --- Шрифты (кэш) ---
-        self.font_speaker = pygame.font.Font('arial', 18)
-        self.font_text    = pygame.font.Font('arial', 22)
-        self.font_hint    = pygame.font.Font('arial', 18)
+        self.font_speaker = pygame.font.Font(None, 18)
+        self.font_text    = pygame.font.Font(None, 22)
+        self.font_hint    = pygame.font.Font(None, 18)
 
         # --- Бокс (кэш) ---
         box_w, box_h = WIDTH - 80, 210

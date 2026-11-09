@@ -22,7 +22,7 @@ class NPC:
         self.color = color
 
         # Имя рендерится один раз при создании (не в draw!)
-        self.font = pygame.font.Font('arial', 12)
+        self.font = pygame.font.Font(None, 12)
         self.name_surface = self.font.render(self.name, True, (255, 255, 255))
 
     # ============================================================
