@@ -211,34 +211,38 @@ function show_infobox() {
 
         /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
         /* average size of droid screen 470dp x 320dp  */
-        canvas.emscripten {
+                canvas.emscripten {
             border: 0px none;
             background-color: transparent;
 
-            /* СЖАТИЕ ИСПРАВЛЕНО: сохраняем пропорции 960x640 */
+            /* Размеры: сохраняем пропорции 960×640 */
+            width: auto !important;
+            height: auto !important;
             max-width: 100vw;
             max-height: 100vh;
-            width: auto;
-            height: auto;
             aspect-ratio: {{cookiecutter.width}} / {{cookiecutter.height}};
 
             z-index: 5;
             padding: 0;
             margin: 0 auto;
 
-            /* Центрируем canvas по центру экрана */
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            /* Центрирование: !important — чтобы Pygbag не перезаписал */
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            bottom: auto !important;
+            right: auto !important;
+            transform: translate(-50%, -50%) !important;
         }
 
-        body {
+                body {
             font-family: arial;
             margin: 0;
-            padding: none;
-            background-color:powderblue;
+            padding: 0;
+            background-color: powderblue;
             overflow: hidden;
+            height: 100vh;
+            width: 100vw;
         }
 
         .topright{
