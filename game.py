@@ -56,8 +56,6 @@ class Game:
         self._init_fonts()
         self._init_cached_surfaces()
 
-        # Есть ли сохранение — определяем один раз при старте.
-        # На титульнике от этого зависит набор кнопок.
         self._has_save = save.exists()
 
     def _init_fonts(self):
@@ -155,6 +153,7 @@ class Game:
         self.key = None
         self.quest_completed = False
         self.lore_reward_given = False
+        self.banner_timer = 0
 
         self._spawn()
 
@@ -211,7 +210,6 @@ class Game:
         return self.current_map
 
     def _ensure_dungeon(self):
-        """Создаёт объекты подземелья, если их ещё нет (без телепорта игрока)."""
         if self.dungeon is None:
             self.dungeon = Dungeon()
 
@@ -614,6 +612,7 @@ class Game:
                 self.world.gate_open = True
                 self.boss.dead = False
                 self.boss_spawned = True
+                self.banner_timer = 3000
                 self.dialog.show(npc.name, ELDER_READY)
                 self.save_progress()
             elif self.boss_spawned:
@@ -835,6 +834,11 @@ class Game:
             ft.update(dt)
         self.floating_texts = [ft for ft in self.floating_texts if not ft.dead]
 
+        if self.banner_timer > 0:
+            self.banner_timer -= dt
+            if self.banner_timer < 0:
+                self.banner_timer = 0
+
         if self.player.hp <= 0 and self.state != 'win' and self.win_delay == 0:
             self.state = 'lose'
 
@@ -908,7 +912,6 @@ class Game:
         if self.state != 'playing' or self.dialog.active:
             return
 
-        # --- Подсказки лестниц (над игроком) ---
         cx = int((self.player.x + self.player.w / 2) // TILE)
         cy = int((self.player.y + self.player.h / 2) // TILE)
         if 0 <= cy < self.world.h and 0 <= cx < self.world.w:
@@ -924,7 +927,6 @@ class Game:
                 hy = int(self.player.y - self.camera.y) - self.HINT_OFFSET_Y
                 self.screen.blit(hint, (hx, hy))
 
-        # --- Подсказка сундука (над сундуком, если босс мёртв и игрок рядом) ---
         if (self.level == 2
                 and self.dungeon_chest
                 and not self.dungeon_chest.opened
@@ -943,13 +945,23 @@ class Game:
         for ft in self.floating_texts:
             ft.draw(self.screen, self.camera)
 
-        if self.level == 1 and self.boss_spawned and not self.boss.dead:
+        if (self.level == 1
+                and self.boss_spawned
+                and not self.boss.dead
+                and self.banner_timer > 0):
             cx = self.player.x + self.player.w // 2
             cy = self.player.y + self.player.h // 2
             in_castle = (self.CASTLE_X_MIN * TILE <= cx <= self.CASTLE_X_MAX * TILE and
                          self.CASTLE_Y_MIN * TILE <= cy <= self.CASTLE_Y_MAX * TILE)
             if not in_castle:
-                self.screen.blit(self.banner_text, (WIDTH // 2 - self.banner_text.get_width() // 2, 70))
+                # Плавное затухание в последнюю секунду:
+                # 3000..1000 мс → alpha 255, 1000..0 мс → 255..0
+                fade = min(1.0, self.banner_timer / 1000.0)
+                self.banner_text.set_alpha(int(255 * fade))
+                self.screen.blit(
+                    self.banner_text,
+                    (WIDTH // 2 - self.banner_text.get_width() // 2, 70)
+                )
 
         if self.state not in ('win', 'lose', 'paused'):
             self.hud.draw(self.screen, self.player, self.TOTAL_CRYSTALS)
