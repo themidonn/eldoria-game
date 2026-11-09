@@ -211,16 +211,17 @@ function show_infobox() {
 
         /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
         /* average size of droid screen 470dp x 320dp  */
-                canvas.emscripten {
+                #canvas.emscripten {
             border: 0px none;
             background-color: transparent;
 
-            /* Размеры: сохраняем пропорции 960×640 */
-            width: auto !important;
-            height: auto !important;
+            /* Размер: максимально возможный, сохраняя 3:2.
+               min() + calc() — единственный надёжный способ
+               «scale to fit» для canvas без искажений. */
+            width: min(100vw, calc(100vh * {{cookiecutter.width}} / {{cookiecutter.height}})) !important;
+            height: min(100vh, calc(100vw * {{cookiecutter.height}} / {{cookiecutter.width}})) !important;
             max-width: 100vw;
             max-height: 100vh;
-            aspect-ratio: {{cookiecutter.width}} / {{cookiecutter.height}};
 
             z-index: 5;
             padding: 0;
@@ -379,7 +380,7 @@ frameborder="1"
         console.warn("TODO: panda3d canvas monitor", self, ecw, ech)
     }
 
-    async function custom_onload(debug_hidden) {
+        async function custom_onload(debug_hidden) {
         // this is called before anything python is loaded
         // make your js customization here
         console.log(__FILE__, "custom_onload")
@@ -391,6 +392,26 @@ frameborder="1"
         box.hidden =  debug_hidden
 
         show_infobox()
+
+        // Принудительное центрирование canvas.
+        // Pygbag ставит inline-стили top:0/left:0 при window_resize(),
+        // и CSS !important в <style> их не перебивает.
+        // Единственный надёжный способ — переписывать inline-стили
+        // через setProperty(..., "important") каждые 200 мс.
+                setInterval(() => {
+            const c = document.getElementById("canvas");
+            if (c && c.style) {
+                c.style.setProperty("position", "absolute", "important");
+                c.style.setProperty("top", "50%", "important");
+                c.style.setProperty("left", "50%", "important");
+                c.style.setProperty("bottom", "auto", "important");
+                c.style.setProperty("right", "auto", "important");
+                c.style.setProperty("transform", "translate(-50%, -50%)", "important");
+                // ↓ ДОБАВИТЬ: размер
+                c.style.setProperty("width", "min(100vw, calc(100vh * {{cookiecutter.width}} / {{cookiecutter.height}}))", "important");
+                c.style.setProperty("height", "min(100vh, calc(100vw * {{cookiecutter.height}} / {{cookiecutter.width}}))", "important");
+            }
+        }, 200);
     }
 
     function custom_prerun(){
