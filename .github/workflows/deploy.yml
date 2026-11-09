@@ -59,7 +59,7 @@ jobs:
       # Pygbag собирает проект в WebAssembly (WASM),
       # чтобы игра запускалась в браузере.
       - name: Build with Pygbag
-        run: python -m pygbag --build .
+        run: python -m pygbag --build --ume_block 0 .
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

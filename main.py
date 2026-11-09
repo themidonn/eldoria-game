@@ -25,7 +25,6 @@ from settings import WIDTH, HEIGHT
 # ============================================================
 pygame.display.init()
 pygame.font.init()
-pygame.display.set_mode((WIDTH, HEIGHT))
 
 
 # ============================================================
