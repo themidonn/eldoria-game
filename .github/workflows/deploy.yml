@@ -53,7 +53,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pygame-ce pygbag
+          # Фиксируем версии, чтобы сборка не сломалась от внезапного релиза.
+          pip install pygame-ce pygbag==0.9.3
 
       # Pygbag собирает проект в WebAssembly (WASM),
       # чтобы игра запускалась в браузере.
@@ -64,10 +65,10 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build/web     # папка с собранной веб-версией
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

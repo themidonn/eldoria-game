@@ -8,7 +8,6 @@ entities/potion.py — Зелье лечения.
 
 import math
 import pygame
-from settings import *
 
 
 class Potion:

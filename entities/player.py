@@ -109,7 +109,9 @@ class Player:
         """Возвращает True, если урон прошёл (не в invuln)."""
         if self.invuln > 0:
             return False
-        self.hp -= dmg
+        # Клэмп в 0: без него HP мог уйти в минус от повторного удара
+        # до того, как game.py успеет переключить state = 'lose'.
+        self.hp = max(0, self.hp - dmg)
         self.invuln = PLAYER_INVULN_TIME
         return True
 
@@ -117,8 +119,9 @@ class Player:
     #   ОТРИСОВКА
     # ============================================================
     def draw(self, screen, cam):
-        # Мигание при неуязвимости: 80 мс — видим, 80 мс — невидим
-        if self.invuln > 0 and (pygame.time.get_ticks() // 80) % 2 == 0:
+        # Мигание при неуязвимости синхронизировано с началом invuln
+        # (а не с глобальным временем) — первый кадр после урона игрок видим.
+        if self.invuln > 0 and (self.invuln // 80) % 2 == 1:
             return
 
         # --- Палитра ---

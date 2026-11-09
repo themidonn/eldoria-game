@@ -75,9 +75,20 @@ class Boss:
                 self.y += dy * s
 
             if self.charge_timer <= 0:
+                # Fallback на случай, если игрок оказался ровно в точке босса:
+                # без него charge_dir стал бы (0, 0), и босс завис бы в вечном charge.
+                cx, cy = dx, dy
+                if cx == 0 and cy == 0:
+                    cx, cy = 1.0, 0.0
                 self.phase = 'charge'
-                self.charge_dir = (dx, dy)
+                self.charge_dir = (cx, cy)
                 self.charge_timer = 3.0
+
+        else:
+            # Игрок ушёл далеко — не даём заряду «накопиться впрок».
+            # При возврате в зону будет минимум 1 секунда на реакцию.
+            if self.charge_timer < 1.0:
+                self.charge_timer = 1.0
 
     def take_damage(self, dmg, fx, fy):
         # fx, fy не используются: босса нельзя отбросить ударом меча.

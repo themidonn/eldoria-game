@@ -87,7 +87,11 @@ class Bat:
         self.hit_flash = 200
         dx = self.x - fx
         dy = self.y - fy
-        d = (dx * dx + dy * dy) ** 0.5 or 1
+        d = (dx * dx + dy * dy) ** 0.5
+        if d < 0.01:
+            # Игрок и мышь оказались в одной точке — отбрасываем вправо,
+            # иначе dx/d * 10 = 0 и мышь «зависла» бы на месте.
+            dx, dy, d = 1.0, 0.0, 1.0
         self.knockback = [dx / d * 10, dy / d * 10]
 
         if self.hp <= 0:

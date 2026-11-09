@@ -51,7 +51,7 @@ class Slime:
             if world.is_walkable_rect(self.x, ny, self.w, self.h):
                 self.y = ny
 
-            # Плавное затухание (0.85 за кадр)
+            # Плавное затухание (0.85 за обновление)
             self.knockback[0] *= 0.85
             self.knockback[1] *= 0.85
             if abs(self.knockback[0]) < 0.1:
@@ -79,7 +79,11 @@ class Slime:
         # Вектор от атакующего к слизню, нормализованный и умноженный на 8
         dx = self.x - fx
         dy = self.y - fy
-        d = (dx * dx + dy * dy) ** 0.5 or 1
+        d = (dx * dx + dy * dy) ** 0.5
+        if d < 0.01:
+            # Игрок и слизень в одной точке — отбрасываем вправо,
+            # иначе knockback = [0, 0] и слизень остался бы на месте.
+            dx, dy, d = 1.0, 0.0, 1.0
         self.knockback = [dx / d * 8, dy / d * 8]
 
         if self.hp <= 0:

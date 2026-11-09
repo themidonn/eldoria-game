@@ -1,13 +1,13 @@
 """
 entities/key.py — Золотой ключ жителя.
 
-Спавнится в случайном месте в лесу (X: 75..95, Y: 20..45).
+Спавнится в случайном месте в лесу (зона задаётся в settings.py:
+KEY_ZONE_X_MIN..MAX, KEY_ZONE_Y_MIN..MAX).
 Покачивается вверх-вниз, светится золотым, исчезает после подбора.
 """
 
 import math
 import pygame
-from settings import *
 
 
 class Key:

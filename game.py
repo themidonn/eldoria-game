@@ -27,6 +27,8 @@ from entities.boss import Boss
 from entities.lore_stone import LoreStone
 from entities.bat import Bat
 from entities.chest import Chest
+from entities.skeleton import Skeleton
+from entities.skeleton_king import SkeletonKing, BoneProjectile
 from ui.hud import HUD
 from ui.dialog import Dialog
 from ui.floating_text import FloatingText
@@ -62,14 +64,20 @@ class Game:
         self.font_hint_banner = pygame.font.SysFont('arial', 18, bold=True)
         self.font_quest = pygame.font.SysFont('arial', 16, bold=True)
 
+    def _make_quest_surface(self, text):
+        """Создаёт полупрозрачную плашку квеста с заданным текстом."""
+        q_text = self.font_quest.render(text, True, (255, 200, 100))
+        q_w, q_h = q_text.get_width() + 20, q_text.get_height() + 10
+        surf = pygame.Surface((q_w, q_h), pygame.SRCALPHA)
+        surf.fill((20, 20, 30, 200))
+        pygame.draw.rect(surf, (200, 180, 120), (0, 0, q_w, q_h), 2, border_radius=5)
+        surf.blit(q_text, (10, 5))
+        return surf
+
     def _init_cached_surfaces(self):
         # Плашка квеста
-        q_text = self.font_quest.render("Задание: Найти ключ жителя", True, (255, 200, 100))
-        q_w, q_h = q_text.get_width() + 20, q_text.get_height() + 10
-        self.quest_surface = pygame.Surface((q_w, q_h), pygame.SRCALPHA)
-        self.quest_surface.fill((20, 20, 30, 200))
-        pygame.draw.rect(self.quest_surface, (200, 180, 120), (0, 0, q_w, q_h), 2, border_radius=5)
-        self.quest_surface.blit(q_text, (10, 5))
+        self.quest_surface_find = self._make_quest_surface("Задание: Найти ключ жителя")
+        self.quest_surface_return = self._make_quest_surface("Задание: Вернуть ключ жителю")
 
         # Баннер «Замок открыт»
         self.banner_text = self.font_hint_banner.render(
@@ -123,6 +131,9 @@ class Game:
         self.dungeon_bats = []
         self.dungeon_chest = None
         self.dungeon_lore_stones = []
+        self.dungeon_skeletons = []
+        self.dungeon_boss = None
+        self.dungeon_projectiles = []
         self.current_map = self.main_world
         self.level = 1
         self.saved_position = None
@@ -225,6 +236,7 @@ class Game:
         self.camera = Camera()
         self.particles = ParticleManager()
         self.floating_texts = []
+        self.dungeon_projectiles = []
 
         # --- Летучие мыши ---
         if not self.dungeon_bats:
@@ -235,17 +247,22 @@ class Game:
                 if self.dungeon.is_walkable_px(px, py):
                     self.dungeon_bats.append(Bat(tx * TILE, ty * TILE))
 
-        # --- Сундук с наградой (вне цикла; в свободной клетке) ---
+        # --- Сундук (за боссом, в (35, 4)) ---
         if self.dungeon_chest is None:
-            for cy in range(8, 13):
-                for cx in range(33, 36):
-                    px = cx * TILE + TILE // 2
-                    py = cy * TILE + TILE // 2
-                    if self.dungeon.is_walkable_px(px, py):
-                        self.dungeon_chest = Chest(cx * TILE, cy * TILE)
-                        break
-                if self.dungeon_chest:
-                    break
+            self.dungeon_chest = Chest(35 * TILE, 4 * TILE)
+
+        # --- Скелеты-стражи (4 штуки вокруг босса) ---
+        if not self.dungeon_skeletons:
+            skeleton_positions = [(31, 11), (39, 11), (31, 15), (39, 15)]
+            for tx, ty in skeleton_positions:
+                px = tx * TILE + TILE // 2
+                py = ty * TILE + TILE // 2
+                if self.dungeon.is_walkable_px(px, py):
+                    self.dungeon_skeletons.append(Skeleton(tx * TILE, ty * TILE))
+
+        # --- Король Скелетов (в глубине зала) ---
+        if self.dungeon_boss is None:
+            self.dungeon_boss = SkeletonKing(35 * TILE, 7 * TILE)
 
         # --- Лор-камни подземелья (только при первом входе) ---
         if not self.dungeon_lore_stones:
@@ -270,6 +287,7 @@ class Game:
         self.camera = Camera()
         self.particles = ParticleManager()
         self.floating_texts = []
+        self.dungeon_projectiles = []
 
     # ============================================================
     #   СОБЫТИЯ
@@ -338,6 +356,8 @@ class Game:
                 return
             self._try_talk_to_npc()
         else:
+            if self._try_open_chest():
+                return
             self._try_read_dungeon_lore()
 
     def _try_use_stairs(self):
@@ -356,6 +376,29 @@ class Game:
             self.exit_dungeon()
             return True
         return False
+
+    def _try_open_chest(self):
+        """Открывает сундук по E: только если босс мёртв и игрок рядом.
+        Возвращает True, если сработало."""
+        chest = self.dungeon_chest
+        if not chest or chest.opened:
+            return False
+        if not (self.dungeon_boss and self.dungeon_boss.dead):
+            return False
+        if not self.player.rect.inflate(40, 40).colliderect(chest.rect):
+            return False
+
+        chest.opened = True
+        self.player.hp = self.player.max_hp
+        self.floating_texts.append(FloatingText(
+            self.player.x + self.player.w / 2, self.player.y - 10,
+            "Сокровище найдено! Полное лечение", (255, 220, 100), duration=2500
+        ))
+        self.particles.spawn_burst(
+            chest.x + chest.w / 2, chest.y + chest.h / 2,
+            (255, 220, 100), count=20
+        )
+        return True
 
     def _try_read_dungeon_lore(self):
         """Проверяет лор-камни в подземелье. Возвращает True, если прочитали."""
@@ -488,7 +531,7 @@ class Game:
                 hb = None
                 self.camera.add_shake(2)
                 self.floating_texts.append(FloatingText(
-                    e.x + e.w / 2, e.y - 10, "-1", (255, 255, 100), duration=600
+                    e.x + e.w / 2, e.y - 10, f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
             if not e.dead and e.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
@@ -508,7 +551,7 @@ class Game:
                 self.player.attack_timer = 0
                 self.camera.add_shake(3)
                 self.floating_texts.append(FloatingText(
-                    self.boss.x + self.boss.w / 2, self.boss.y - 10, "-1", (255, 255, 100), duration=600
+                    self.boss.x + self.boss.w / 2, self.boss.y - 10, f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
             if not self.boss.dead and self.boss.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
@@ -532,10 +575,10 @@ class Game:
                     self.state = 'win'
 
     def _update_level_2(self, dt):
-        """Логика подземелья: обновление карты, мышей, боя."""
+        """Логика подземелья: карта, мыши, скелеты, босс, снаряды, сундук."""
         self.dungeon.update(dt)
 
-        # --- Мыши и бой ---
+        # --- Мыши ---
         hb = self.player.get_attack_hitbox()
         for bat in self.dungeon_bats:
             if bat.dead:
@@ -550,7 +593,7 @@ class Game:
                 hb = None
                 self.camera.add_shake(2)
                 self.floating_texts.append(FloatingText(
-                    bat.x + bat.w / 2, bat.y - 10, "-1", (255, 255, 100), duration=600
+                    bat.x + bat.w / 2, bat.y - 10, f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
 
             if not bat.dead and bat.rect.colliderect(self.player.rect):
@@ -566,23 +609,91 @@ class Game:
                     bat.x + bat.w / 2, bat.y + bat.h / 2, (80, 60, 120)
                 )
 
-        # --- Проверка награды (ВНЕ цикла!) ---
-        if (self.dungeon_chest
-                and not self.dungeon_chest.opened
-                and self.dungeon_bats
-                and all(b.dead for b in self.dungeon_bats)
-                and self.player.rect.inflate(40, 40).colliderect(self.dungeon_chest.rect)):
-            self.dungeon_chest.opened = True
-            self.player.hp = self.player.max_hp
-            self.floating_texts.append(FloatingText(
-                self.player.x + self.player.w / 2, self.player.y - 10,
-                "Сокровище найдено! Полное лечение", (255, 220, 100), duration=2500
-            ))
-            self.particles.spawn_burst(
-                self.dungeon_chest.x + self.dungeon_chest.w / 2,
-                self.dungeon_chest.y + self.dungeon_chest.h / 2,
-                (255, 220, 100), count=20
-            )
+        # --- Скелеты ---
+        hb = self.player.get_attack_hitbox()
+        for sk in self.dungeon_skeletons:
+            if sk.dead:
+                continue
+            sk.update(self.player, self.dungeon, dt)
+
+            if hb and hb.colliderect(sk.rect):
+                sk.take_damage(self.player.damage,
+                               self.player.x + self.player.w / 2,
+                               self.player.y + self.player.h / 2)
+                self.player.attack_timer = 0
+                hb = None
+                self.camera.add_shake(2)
+                self.floating_texts.append(FloatingText(
+                    sk.x + sk.w / 2, sk.y - 10, f"-{self.player.damage}", (255, 255, 100), duration=600
+                ))
+
+            if not sk.dead and sk.rect.colliderect(self.player.rect):
+                if self.player.take_damage(1):
+                    self.camera.add_shake(5)
+                    self.floating_texts.append(FloatingText(
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        "-1 HP", (255, 100, 100)
+                    ))
+
+            if sk.dead:
+                self.particles.spawn_burst(
+                    sk.x + sk.w / 2, sk.y + sk.h / 2, (200, 200, 180)
+                )
+
+        # --- Король Скелетов ---
+        if self.dungeon_boss and not self.dungeon_boss.dead:
+            self.dungeon_boss.update(self.player, self.dungeon, dt,
+                                     self.dungeon_projectiles)
+            hb = self.player.get_attack_hitbox()
+            if hb and hb.colliderect(self.dungeon_boss.rect):
+                self.dungeon_boss.take_damage(self.player.damage,
+                                              self.player.x + self.player.w / 2,
+                                              self.player.y + self.player.h / 2)
+                self.player.attack_timer = 0
+                self.camera.add_shake(3)
+                self.floating_texts.append(FloatingText(
+                    self.dungeon_boss.x + self.dungeon_boss.w / 2,
+                    self.dungeon_boss.y - 10,
+                    f"-{self.player.damage}", (255, 255, 100), duration=600
+                ))
+
+            if (not self.dungeon_boss.dead
+                    and self.dungeon_boss.rect.colliderect(self.player.rect)):
+                if self.player.take_damage(1):
+                    self.camera.add_shake(5)
+                    self.floating_texts.append(FloatingText(
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        "-1 HP", (255, 100, 100)
+                    ))
+
+            # Смерть босса
+            if self.dungeon_boss.dead:
+                self.particles.spawn_burst(
+                    self.dungeon_boss.x + self.dungeon_boss.w / 2,
+                    self.dungeon_boss.y + self.dungeon_boss.h / 2,
+                    (240, 200, 80), count=40
+                )
+                self.camera.add_shake(10)
+                self.floating_texts.append(FloatingText(
+                    self.dungeon_boss.x + self.dungeon_boss.w / 2,
+                    self.dungeon_boss.y - 20,
+                    "Король Скелетов пал!", (255, 220, 100), duration=2000
+                ))
+
+        # --- Снаряды босса ---
+        for proj in self.dungeon_projectiles:
+            if proj.dead:
+                continue
+            proj.update(self.dungeon, dt)
+            if not proj.dead and proj.rect.colliderect(self.player.rect):
+                proj.dead = True
+                if self.player.take_damage(1):
+                    self.camera.add_shake(5)
+                    self.floating_texts.append(FloatingText(
+                        self.player.x + self.player.w / 2, self.player.y - 10,
+                        "-1 HP", (255, 100, 100)
+                    ))
+        self.dungeon_projectiles = [p for p in self.dungeon_projectiles if not p.dead]
 
     def _update_common(self, dt):
         for ft in self.floating_texts:
@@ -639,16 +750,21 @@ class Game:
             else: e.draw(self.screen, self.camera)
 
     def _draw_level_2(self):
-        # Лор-камни (на полу, как декор)
+        # Лор-камни и сундук — на полу
         for stone in self.dungeon_lore_stones:
             stone.draw(self.screen, self.camera)
-
-        # Сундук
         if self.dungeon_chest:
             self.dungeon_chest.draw(self.screen, self.camera)
 
-        # Мыши и игрок — по Y-координате
+        # Снаряды — рисуем под мышью/скелетами (визуально низкие)
+        for proj in self.dungeon_projectiles:
+            proj.draw(self.screen, self.camera)
+
+        # Все живые сущности — сортировка по Y
         ents = [(b.y + b.h, b) for b in self.dungeon_bats if not b.dead]
+        ents += [(s.y + s.h, s) for s in self.dungeon_skeletons if not s.dead]
+        if self.dungeon_boss and not self.dungeon_boss.dead:
+            ents.append((self.dungeon_boss.y + self.dungeon_boss.h, self.dungeon_boss))
         ents.append((self.player.y + self.player.h, self.player))
         ents.sort(key=lambda p: p[0])
 
@@ -701,8 +817,9 @@ class Game:
 
             if self.level == 1:
                 self.minimap.draw(self.screen, self)
-                if self.villager_met and not self.villager_refused and not self.has_key and not self.quest_completed:
-                    self.screen.blit(self.quest_surface, (20, 60))
+                if self.villager_met and not self.villager_refused and not self.quest_completed:
+                    surf = self.quest_surface_return if self.has_key else self.quest_surface_find
+                    self.screen.blit(surf, (20, 60))
 
         # Красная виньетка при низком HP
         if self.player.hp <= 2 and self.state == 'playing':

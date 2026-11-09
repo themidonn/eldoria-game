@@ -6,7 +6,6 @@ entities/lore_stone.py — Древний камень с руной.
 """
 
 import pygame
-from settings import *
 
 
 class LoreStone:
