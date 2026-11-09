@@ -18,7 +18,10 @@ class HUD:
     #   КОНСТРУКТОР
     # ============================================================
     def __init__(self):
-        self.font = pygame.font.Font(None, 20)
+        try:
+            self.font = pygame.font.Font("assets/Tiny5-Bold.ttf", 24)
+        except FileNotFoundError:
+            self.font = pygame.font.Font(None, 24)
 
         # Кэш текста кристаллов (перерендер только при изменении)
         self._last_text = None

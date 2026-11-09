@@ -62,13 +62,26 @@ class Game:
         self._has_save = save.exists()
 
     def _init_fonts(self):
-        self.font_title_big = pygame.font.Font(None, 56)
-        self.font_title_small = pygame.font.Font(None, 24)
-        self.font_win_big = pygame.font.Font(None, 64)
-        self.font_win_small = pygame.font.Font(None, 26)
-        self.font_hint_banner = pygame.font.Font(None, 18)
-        self.font_quest = pygame.font.Font(None, 16)
-        self.font_intro = pygame.font.Font(None, 28)
+        bold_font = "assets/Tiny5-Bold.ttf"
+        regular_font = "assets/Tiny5-Regular.ttf"
+
+        try:
+            self.font_title_big = pygame.font.Font(bold_font, 64)
+            self.font_title_small = pygame.font.Font(regular_font, 32)
+            self.font_win_big = pygame.font.Font(bold_font, 64)
+            self.font_win_small = pygame.font.Font(regular_font, 32)
+            self.font_hint_banner = pygame.font.Font(bold_font, 24)
+            self.font_quest = pygame.font.Font(bold_font, 24)
+            self.font_intro = pygame.font.Font(regular_font, 32)
+        except FileNotFoundError:
+            print("Шрифты не найдены, используются стандартные.")
+            self.font_title_big = pygame.font.Font(None, 64)
+            self.font_title_small = pygame.font.Font(None, 32)
+            self.font_win_big = pygame.font.Font(None, 64)
+            self.font_win_small = pygame.font.Font(None, 32)
+            self.font_hint_banner = pygame.font.Font(None, 24)
+            self.font_quest = pygame.font.Font(None, 24)
+            self.font_intro = pygame.font.Font(None, 32)
 
     def _make_quest_surface(self, text):
         q_text = self.font_quest.render(text, True, (255, 200, 100))
@@ -105,13 +118,13 @@ class Game:
         self.lose_text_small = self.font_win_small.render("Нажми R для повторной попытки", True, (220, 220, 220))
 
         self.pause_text_big = self.font_win_big.render("ПАУЗА", True, (240, 210, 130))
-        self.pause_text_1 = self.font_win_small.render("ESC — продолжить игру", True, (220, 220, 240))
-        self.pause_text_save = self.font_win_small.render("F5 — сохранить игру", True, (150, 200, 255))
-        self.pause_text_2 = self.font_win_small.render("Q — выйти из игры", True, (200, 200, 200))
+        self.pause_text_1 = self.font_win_small.render("ESC - продолжить игру", True, (220, 220, 240))
+        self.pause_text_save = self.font_win_small.render("F5 - сохранить игру", True, (150, 200, 255))
+        self.pause_text_2 = self.font_win_small.render("Q - выйти из игры", True, (200, 200, 200))
 
-        self.hint_enter = self._make_hint("E — войти в подземелье")
-        self.hint_exit = self._make_hint("E — выйти на поверхность")
-        self.hint_chest = self._make_hint("E — открыть сундук")
+        self.hint_enter = self._make_hint("E - войти в подземелье")
+        self.hint_exit = self._make_hint("E - выйти на поверхность")
+        self.hint_chest = self._make_hint("E - открыть сундук")
 
         # Страницы вступления — каждая отрендерена в готовый Surface
         self.intro_pages = [self._wrap_intro_page(p) for p in INTRO_PAGES]
@@ -1083,10 +1096,10 @@ class Game:
             py = 280
             self.screen.blit(page, (px, py))
 
-        # --- Индикатор страниц (●○○○) ---
+        # --- Индикатор страниц ([X] [ ] [ ]) ---
         dots = ""
         for i in range(len(self.intro_pages)):
-            dots += "●  " if i == self.intro_page else "○  "
+            dots += "[X] " if i == self.intro_page else "[ ] "
         dots_surf = self.font_title_small.render(dots.strip(), True, (180, 180, 200))
         self.screen.blit(dots_surf, (WIDTH // 2 - dots_surf.get_width() // 2, HEIGHT - 160))
 
@@ -1106,8 +1119,8 @@ class Game:
         self.screen.blit(s, (WIDTH // 2 - s.get_width() // 2, 280))
 
         if self._has_save:
-            p1 = self.font_title_small.render("Enter — Продолжить", True, (100, 255, 100))
-            p2 = self.font_title_small.render("N — Новая игра", True, (255, 200, 100))
+            p1 = self.font_title_small.render("Enter - Продолжить", True, (100, 255, 100))
+            p2 = self.font_title_small.render("N - Новая игра", True, (255, 200, 100))
             self.screen.blit(p1, (WIDTH // 2 - p1.get_width() // 2, 380))
             self.screen.blit(p2, (WIDTH // 2 - p2.get_width() // 2, 410))
         else:
@@ -1115,9 +1128,9 @@ class Game:
             self.screen.blit(p, (WIDTH // 2 - p.get_width() // 2, 400))
 
         for i, line in enumerate([
-            "WASD / Стрелки — движение",
-            "Space — удар мечом",
-            "E — взаимодействие",
+            "WASD / Стрелки - движение",
+            "Space - удар мечом",
+            "E - взаимодействие",
             "Собери 3 Кристалла Света, найди Старейшину, победи Морвейна",
         ]):
             txt = self.font_title_small.render(line, True, (180, 180, 200))

@@ -26,10 +26,14 @@ class Dialog:
         self.page = 0
         self.is_choice = False
 
-        # --- Шрифты (кэш) ---
-        self.font_speaker = pygame.font.Font(None, 18)
-        self.font_text    = pygame.font.Font(None, 22)
-        self.font_hint    = pygame.font.Font(None, 18)
+        try:
+            self.font_speaker = pygame.font.Font("assets/Tiny5-Bold.ttf", 24)
+            self.font_text    = pygame.font.Font("assets/Tiny5-Regular.ttf", 24)
+            self.font_hint    = pygame.font.Font("assets/Tiny5-Bold.ttf", 16)
+        except FileNotFoundError:
+            self.font_speaker = pygame.font.Font(None, 24)
+            self.font_text    = pygame.font.Font(None, 24)
+            self.font_hint    = pygame.font.Font(None, 16)
 
         # --- Бокс (кэш) ---
         box_w, box_h = WIDTH - 80, 210

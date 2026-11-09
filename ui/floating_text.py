@@ -17,8 +17,6 @@ class FloatingText:
     # ============================================================
     #   КЛАССОВЫЙ КЭШ (общий для всех экземпляров)
     # ============================================================
-    # Шрифт создаётся один раз — при первом создании объекта.
-    # Все экземпляры используют его совместно.
     _font = None
 
     # ============================================================
@@ -27,7 +25,10 @@ class FloatingText:
     def __init__(self, x, y, text, color=COLOR_UI_TEXT, duration=1200):
         # Ленивая инициализация шрифта
         if FloatingText._font is None:
-            FloatingText._font = pygame.font.Font(None, 22)
+            try:
+                FloatingText._font = pygame.font.Font("assets/Tiny5-Bold.ttf", 24)
+            except FileNotFoundError:
+                FloatingText._font = pygame.font.Font(None, 24)
 
         self.x = float(x)
         self.y = float(y)
@@ -36,8 +37,6 @@ class FloatingText:
         self.dead = False
 
         # Две поверхности: цветной текст + чёрная тень.
-        # У каждого объекта свои — поэтому set_alpha в draw()
-        # не влияет на другие тексты.
         self.text_surf   = FloatingText._font.render(text, True, color)
         self.shadow_surf = FloatingText._font.render(text, True, (0, 0, 0))
 

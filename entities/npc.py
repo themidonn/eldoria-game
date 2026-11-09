@@ -17,12 +17,15 @@ class NPC:
     # ============================================================
     def __init__(self, x, y, name, color=COLOR_ELDER):
         self.x, self.y = x, y
-        self.w, self.h = 30, 34  # размеры тела
+        self.w, self.h = 30, 34
         self.name = name
         self.color = color
 
-        # Имя рендерится один раз при создании (не в draw!)
-        self.font = pygame.font.Font(None, 12)
+        try:
+            self.font = pygame.font.Font("assets/Tiny5-Bold.ttf", 16)
+        except FileNotFoundError:
+            self.font = pygame.font.Font(None, 16)
+
         self.name_surface = self.font.render(self.name, True, (255, 255, 255))
 
     # ============================================================
@@ -54,4 +57,4 @@ class NPC:
 
         # --- Имя над головой (центрированное, готовая Surface) ---
         name_x = sx + self.w // 2 - self.name_surface.get_width() // 2
-        screen.blit(self.name_surface, (name_x, sy - 14))
+        screen.blit(self.name_surface, (name_x, sy - 16))
