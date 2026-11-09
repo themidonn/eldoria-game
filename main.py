@@ -6,12 +6,9 @@ main.py — точка входа в игру.
    (pygame.init() НЕ используем: в Pygbag он падает на mixer.init()
    с ошибкой SDL_OpenAudioDevice / Mix_OpenAudioDevice. Звук в игре
    пока не используется, поэтому микшер не инициализируем.)
-2. Только ПОСЛЕ этого можно импортировать Game.
-
-Почему так: в WebAssembly (Pygbag) импорт игровых модулей
-цепляет pygame и требует, чтобы он уже был инициализирован.
-Если поменять местами — игра упадёт при запуске в браузере
-с ошибкой AttributeError: module 'pygame' has no attribute 'init'.
+2. Создаём окно через display.set_mode() ДО импорта Game.
+   Pygbag требует, чтобы canvas был создан до загрузки модулей.
+3. Только ПОСЛЕ этого можно импортировать Game.
 """
 
 import os
@@ -28,6 +25,7 @@ from settings import WIDTH, HEIGHT
 # ============================================================
 pygame.display.init()
 pygame.font.init()
+pygame.display.set_mode((WIDTH, HEIGHT))  # ← ДОБАВЛЕНО: Pygbag требует создания окна здесь
 
 
 # ============================================================
@@ -43,7 +41,7 @@ async def main():
     """Асинхронная точка входа. Pygbag требует async для работы в браузере."""
     game = Game()
     await game.run()
-    await asyncio.sleep(0)
+    await asyncio.sleep(0)  # ← ДОБАВЛЕНО: защита от зависания браузера при выходе
 
 
 if __name__ == "__main__":

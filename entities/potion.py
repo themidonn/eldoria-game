@@ -4,6 +4,17 @@ entities/potion.py — Зелье лечения.
 Подбирается игроком (если HP не полное). Восстанавливает 1 HP.
 Покачивается вверх-вниз, светится красным. Флакон = 5 частей:
 горлышко, пробка, тело, обводка тела, блик.
+
+Используется в game.py:
+  - _spawn() — создаёт 5 зелий в фиксированных точках
+  - _update_level_1() — update + проверка коллизии с игроком
+    (только если hp < max_hp — иначе зелье остаётся лежать)
+  - _draw_level_1() — draw (только если не собрано)
+  - save_progress() / load_progress() — сохраняет collected по индексу
+
+ВАЖНО: конструктор создаёт pygame.Surface для свечения —
+перед созданием Potion должен быть вызван pygame.display.init().
+В main.py это гарантировано: init до импорта Game.
 """
 
 import math
@@ -13,17 +24,32 @@ import pygame
 class Potion:
 
     # ============================================================
+    #   ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
+    # ============================================================
+    NECK_COLOR   = (80, 60, 40)          # горлышко
+    CORK_COLOR   = (150, 100, 50)        # пробка
+    BODY_COLOR   = (200, 40, 40)         # красная жидкость
+    BODY_OUTLINE = (60, 10, 10)          # обводка тела
+    HIGHLIGHT    = (255, 200, 200)       # блик
+    GLOW_COLOR   = (255, 150, 150, 70)   # свечение (alpha в цвете)
+
+    # ============================================================
     #   КОНСТРУКТОР
     # ============================================================
     def __init__(self, x, y):
-        self.x, self.y = x, y
+        # float() — для консистентности с bat.py / boss.py / enemy.py / key.py.
+        self.x = float(x)
+        self.y = float(y)
+
         self.w = self.h = 24
         self.collected = False
         self.bob = 0                          # фаза покачивания
 
-        # Кэшируем красное свечение (60x60 с альфа-каналом)
+        # Кэшируем свечение один раз (60×60 с альфа-каналом).
+        # SRCALPHA + цвет (255, 150, 150, 70) — Pygbag-safe:
+        # альфа задаётся через цвет, а не через Surface.set_alpha().
         self.glow = pygame.Surface((60, 60), pygame.SRCALPHA)
-        pygame.draw.circle(self.glow, (255, 150, 150, 70), (30, 30), 30)
+        pygame.draw.circle(self.glow, self.GLOW_COLOR, (30, 30), 30)
 
     # ============================================================
     #   СВОЙСТВА
@@ -36,7 +62,13 @@ class Potion:
     #   ЛОГИКА
     # ============================================================
     def update(self, dt):
-        self.bob += dt * 0.005
+        # Собранное зелье не анимируется — экономим вычисления.
+        if self.collected:
+            return
+
+        # bob крутится в цикле, чтобы float не терял точность
+        # при очень долгой игре (как в key.py / pickup.py).
+        self.bob = (self.bob + dt * 0.005) % (2 * math.pi * 1000)
 
     # ============================================================
     #   ОТРИСОВКА
@@ -45,30 +77,34 @@ class Potion:
         if self.collected:
             return
 
-        # --- Палитра флакона (5 частей) ---
-        NECK_COLOR    = (80, 60, 40)          # горлышко
-        CORK_COLOR    = (150, 100, 50)        # пробка
-        BODY_COLOR    = (200, 40, 40)         # красная жидкость
-        BODY_OUTLINE  = (60, 10, 10)          # обводка тела
-        HIGHLIGHT     = (255, 200, 200)       # блик
-
         # int() для совместимости с WebAssembly (Pygbag не принимает float)
         sx = int(self.x - cam.x)
+        # Амплитуда 3 px — чуть меньше, чем у кристалла (4 px):
+        # зелье тяжелее, покачивается медленнее.
         sy = int(self.y - cam.y + math.sin(self.bob) * 3)
 
         # --- Свечение (готовый Surface) ---
+        # glow 60×60, центр в (30, 30). Смещение (-18, -18) даёт
+        # центр свечения на (sx + 12, sy + 12) — центр флакона по X.
         screen.blit(self.glow, (sx - 18, sy - 18))
 
         # --- Горлышко (узкая вертикальная полоска) ---
-        pygame.draw.rect(screen, NECK_COLOR, (sx + 9, sy + 2, 6, 8))
+        # x: 9..15 (ширина 6), центр x = 12. y: 2..10.
+        # Перекрывается с телом (y: 8..22) на 2 px — чтобы не было разрыва.
+        pygame.draw.rect(screen, self.NECK_COLOR, (sx + 9, sy + 2, 6, 8))
 
         # --- Пробка (поперечная полоска сверху) ---
-        pygame.draw.rect(screen, CORK_COLOR, (sx + 8, sy, 8, 4), border_radius=2)
+        # x: 8..16 (ширина 8), центр x = 12. y: 0..4.
+        # Перекрывается с горлышком (y: 2..10) на 2 px.
+        pygame.draw.rect(screen, self.CORK_COLOR,
+                         (sx + 8, sy, 8, 4), border_radius=2)
 
         # --- Тело флакона (красный прямоугольник со скруглением) ---
+        # x: 4..20 (ширина 16), центр x = 12. y: 8..22.
         body_rect = (sx + 4, sy + 8, 16, 14)
-        pygame.draw.rect(screen, BODY_COLOR, body_rect, border_radius=4)
-        pygame.draw.rect(screen, BODY_OUTLINE, body_rect, 1, border_radius=4)
+        pygame.draw.rect(screen, self.BODY_COLOR, body_rect, border_radius=4)
+        pygame.draw.rect(screen, self.BODY_OUTLINE, body_rect, 1, border_radius=4)
 
         # --- Блик (белая точка на жидкости) ---
-        pygame.draw.circle(screen, HIGHLIGHT, (sx + 8, sy + 12), 2)
+        # x = 8, y = 12 — левый верх тела, создаёт эффект «стекла».
+        pygame.draw.circle(screen, self.HIGHLIGHT, (sx + 8, sy + 12), 2)

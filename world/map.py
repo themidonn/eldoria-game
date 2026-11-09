@@ -7,6 +7,12 @@ world/map.py — Главный мир (уровень 1).
 
 Генерация детерминирована (random.Random(7)) — карта
 всегда одинаковая, чтобы игрок мог ориентироваться.
+
+Используется в game.py:
+  - _reset() — создаёт экземпляр (main_world)
+  - _update_level_1() — is_walkable_rect
+  - _draw_level_1() — draw
+  - save_progress() / load_progress() — сохраняет только gate_open
 """
 
 import random
@@ -23,9 +29,14 @@ class World:
     WIDTH_TILES  = 180
     HEIGHT_TILES = 130
 
-    # Количество деревьев (случайно раскиданы по траве)
+    # Количество деревьев (случайно раскиданы по траве).
+    # При 180×130 = 23400 тайлов и TREE_COUNT = 1100 деревьями
+    # станет ~4.7% травы — карта не «забита», но и не пустая.
     TREE_COUNT = 1100
-    RANDOM_SEED = 7               # фиксированный seed → одинаковая карта
+
+    # Фиксированные seed → одинаковая карта при каждом запуске.
+    # Игрок может запомнить расположение и ориентироваться.
+    RANDOM_SEED = 7
     MOUNTAIN_SEED = 8
     SWAMP_SEED = 9
 
@@ -86,8 +97,15 @@ class World:
     #   ГЕНЕРАЦИЯ
     # ============================================================
     def generate(self):
-        """Полная генерация: границы → деревья → горы → болото →
-        озеро → замок → деревня → очистка."""
+        """
+        Полная генерация в порядке наложения слоёв:
+        границы → деревья → горы → болото → озеро → замок →
+        деревня → очистка ключевых зон.
+
+        Порядок важен: деревня и очистка идут последними, чтобы
+        гарантированно расчистить площадки под объекты (иначе
+        дерево могло бы «сесть» на точку спавна кристалла).
+        """
         self.tiles = [[GRASS for _ in range(self.w)] for _ in range(self.h)]
         self._generate_borders()
         self._generate_trees()
@@ -117,7 +135,8 @@ class World:
                 self.tiles[ty][tx] = TREE
 
     def _generate_mountains(self):
-        """Естественная горная гряда с пиками, перевалами и долинами.
+        """
+        Естественная горная гряда с пиками, перевалами и долинами.
 
         Идём по X слева направо. Для каждого блока выбираем:
         - Пик (55%): полная стена y=2..15, ширина 2..4
@@ -127,6 +146,9 @@ class World:
 
         Гарантия проходимости: не более 3 горных блоков подряд
         (пик/перевал), затем принудительная долина.
+
+        force_valley=True — всегда идёт в else (долина), потому что
+        первые два условия содержат `not force_valley`.
         """
         rng = random.Random(self.MOUNTAIN_SEED)
 
@@ -138,8 +160,8 @@ class World:
                             >= self.MOUNTAIN_MAX_BLOCKS_BEFORE_VALLEY)
             roll = rng.random()
 
+            # --- Пик: полная стена ---
             if not force_valley and roll < 0.55:
-                # --- Пик: полная стена ---
                 width = rng.randint(2, 4)
                 for dx in range(width):
                     if x + dx > self.MOUNTAIN_X_MAX:
@@ -150,8 +172,8 @@ class World:
                 x += width
                 blocks_since_valley += 1
 
+            # --- Перевал: гора сверху, проход снизу ---
             elif not force_valley and roll < 0.80:
-                # --- Перевал: гора сверху, проход снизу ---
                 width = rng.randint(1, 3)
                 peak_h = rng.randint(4, 8)
                 for dx in range(width):
@@ -164,14 +186,22 @@ class World:
                 x += width
                 blocks_since_valley += 1
 
+            # --- Долина: широкий проход (сбрасывает счётчик) ---
             else:
-                # --- Долина: широкий проход ---
                 gap = rng.randint(3, 6)
                 x += gap
                 blocks_since_valley = 0
 
     def _generate_swamp(self):
-        """Болото на юго-западе с рваными краями (неровный круг)."""
+        """
+        Болото на юго-западе с рваными краями (неровный круг).
+
+        Три зоны:
+          dist < 0.6·max_r        → SWAMP (ядро, 100%)
+          0.6·max_r .. 0.9·max_r  → SWAMP с вероятностью 70%
+          0.9·max_r .. max_r      → SWAMP с вероятностью 30%
+        Края получаются рваными за счёт вероятностного заполнения.
+        """
         rng = random.Random(self.SWAMP_SEED)
         cx = (self.SWAMP_X_MIN + self.SWAMP_X_MAX) / 2
         cy = (self.SWAMP_Y_MIN + self.SWAMP_Y_MAX) / 2
@@ -192,18 +222,33 @@ class World:
                     self.tiles[ty][tx] = SWAMP
 
     def _generate_lake(self):
-        """Озеро круглой формы с центром в LAKE_CENTER_X/Y."""
+        """
+        Озеро круглой формы с центром в LAKE_CENTER_X/Y.
+
+        Проверка границ 0 <= tx < self.w / 0 <= ty < self.h — защита
+        от IndexError, если когда-нибудь LAKE_CENTER или LAKE_RADIUS
+        изменят так, что круг выйдет за край карты.
+        """
         for ty in range(self.LAKE_CENTER_Y - self.LAKE_RADIUS - 2,
                         self.LAKE_CENTER_Y + self.LAKE_RADIUS + 2):
             for tx in range(self.LAKE_CENTER_X - self.LAKE_RADIUS - 2,
                             self.LAKE_CENTER_X + self.LAKE_RADIUS + 2):
+                # --- Защита от выхода за границы карты ---
+                if not (0 <= tx < self.w and 0 <= ty < self.h):
+                    continue
+
                 dx = tx - self.LAKE_CENTER_X
                 dy = ty - self.LAKE_CENTER_Y
                 if dx * dx + dy * dy < self.LAKE_RADIUS * self.LAKE_RADIUS:
                     self.tiles[ty][tx] = WATER
 
     def _generate_castle(self):
-        """Замок с ареной босса: стены по периметру, пол внутри, ворота в стене."""
+        """
+        Замок с ареной босса: стены по периметру, пол внутри,
+        ворота в нижней стене (GATE_Y = CASTLE_Y_MAX).
+
+        Ворота открываются после сбора 3 кристаллов (gate_open = True).
+        """
         for ty in range(self.CASTLE_Y_MIN, self.CASTLE_Y_MAX + 1):
             for tx in range(self.CASTLE_X_MIN, self.CASTLE_X_MAX + 1):
                 if ty in (self.CASTLE_Y_MIN, self.CASTLE_Y_MAX) or \
@@ -215,7 +260,7 @@ class World:
         self.tiles[self.GATE_Y][self.GATE_X] = GATE
 
     def _generate_village(self):
-        """Деревня: расчистка площади, дома, колодец."""
+        """Деревня: расчистка площади, дома, колодец (вход в подземелье)."""
         self.clear_area(self.VILLAGE_CENTER_X, self.VILLAGE_CENTER_Y,
                         self.VILLAGE_CLEAR_RADIUS)
 
@@ -242,14 +287,23 @@ class World:
     #   КОЛЛИЗИИ
     # ============================================================
     def is_walkable_px(self, px, py):
-        """Проходим ли пиксель? Горы — нет, болото — да."""
+        """
+        Проходим ли пиксель?
+
+        Горы, деревья, вода, дома, стены — нет.
+        Болото — да (замедляет только визуально, но проходимо).
+        Ворота — только если gate_open (открыты после 3 кристаллов).
+        """
         tx, ty = int(px // TILE), int(py // TILE)
         if tx < 0 or ty < 0 or tx >= self.w or ty >= self.h:
             return False
 
         t = self.tiles[ty][tx]
+
+        # --- Ворота: проходимы только когда открыты ---
         if t == GATE:
             return self.gate_open
+
         return t in (GRASS, FLOOR, DARK_FLOOR, STAIRS_DOWN, STAIRS_UP, SWAMP)
 
     def is_walkable_rect(self, x, y, w, h):
@@ -258,6 +312,8 @@ class World:
         tx1, ty1 = int((x + w - 1) // TILE), int((y + h - 1) // TILE)
         for ty in range(ty0, ty1 + 1):
             for tx in range(tx0, tx1 + 1):
+                # Проверяем центр каждого тайла — так проще и надёжнее,
+                # чем проверять 4 угла прямоугольника.
                 if not self.is_walkable_px(tx * TILE + TILE // 2,
                                            ty * TILE + TILE // 2):
                     return False
@@ -267,7 +323,12 @@ class World:
     #   ОТРИСОВКА
     # ============================================================
     def draw(self, screen, cam):
-        """Рисует видимые тайлы (только то, что в кадре)."""
+        """
+        Рисует видимые тайлы (только то, что в кадре).
+
+        +2 тайла запаса по каждой оси — чтобы на краю экрана
+        не появлялась полоса пустоты при движении камеры.
+        """
         x0 = max(0, int(cam.x) // TILE)
         y0 = max(0, int(cam.y) // TILE)
         x1 = min(self.w, (int(cam.x) + WIDTH) // TILE + 2)
@@ -278,12 +339,13 @@ class World:
                 self._draw_tile(screen, cam, tx, ty)
 
     def _draw_tile(self, screen, cam, tx, ty):
-        """Рендерит один тайл по его типу."""
+        """Рендерит один тайл по его типу (диспетчер)."""
         t = self.tiles[ty][tx]
         sx = int(tx * TILE - cam.x)
         sy = int(ty * TILE - cam.y)
         r = (sx, sy, TILE, TILE)
 
+        # --- Диспетчеризация по типу тайла ---
         if t == GRASS:
             self._draw_grass(screen, sx, sy, r)
         elif t == TREE:
@@ -291,7 +353,7 @@ class World:
         elif t == WATER:
             self._draw_water(screen, sx, sy, r)
         elif t == STONE:
-            self._draw_stone(screen, r)
+            self._draw_stone(screen, sx, sy, r)
         elif t == DARK_FLOOR:
             pygame.draw.rect(screen, COLOR_DARK_FLOOR, r)
         elif t == HOUSE:
@@ -303,16 +365,21 @@ class World:
         elif t == STAIRS_UP:
             self._draw_stairs_up(screen, sx, sy, r)
         elif t == MOUNTAIN:
-            self._draw_mountain(screen, r)
+            self._draw_mountain(screen, sx, sy, r)
         elif t == SWAMP:
             self._draw_swamp(screen, sx, sy, r)
 
+    # ============================================================
+    #   ОТРИСОВКА ТАЙЛОВ (каждый метод принимает screen, sx, sy, r)
+    # ============================================================
     def _draw_grass(self, screen, sx, sy, r):
+        """Трава: зелёный фон + две тёмные точки (травинки)."""
         pygame.draw.rect(screen, COLOR_GRASS, r)
         pygame.draw.rect(screen, COLOR_GRASS_DARK, (sx + 8, sy + 8, 4, 4))
         pygame.draw.rect(screen, COLOR_GRASS_DARK, (sx + 22, sy + 18, 4, 4))
 
     def _draw_tree(self, screen, sx, sy, r):
+        """Дерево: тёмная трава под кроной + круг кроны + обводка."""
         pygame.draw.rect(screen, COLOR_GRASS_DARK, r)
         pygame.draw.circle(screen, COLOR_TREE,
                            (sx + TILE // 2, sy + TILE // 2), TILE // 2 - 2)
@@ -320,27 +387,31 @@ class World:
                            (sx + TILE // 2, sy + TILE // 2), TILE // 2 - 2, 2)
 
     def _draw_water(self, screen, sx, sy, r):
+        """Вода: синий фон + светлая волна по центру."""
         pygame.draw.rect(screen, COLOR_WATER, r)
         pygame.draw.line(screen, (120, 180, 240),
                          (sx + 8, sy + 16), (sx + 24, sy + 16), 2)
 
-    def _draw_stone(self, screen, r):
+    def _draw_stone(self, screen, sx, sy, r):
+        """Каменная стена: серый блок + тёмная обводка."""
         pygame.draw.rect(screen, COLOR_STONE, r)
         pygame.draw.rect(screen, (60, 60, 70), r, 2)
 
     def _draw_house(self, screen, sx, sy, r):
+        """Дом: стена + крыша (верхняя половина) + обводка."""
         pygame.draw.rect(screen, COLOR_HOUSE, r)
         pygame.draw.rect(screen, COLOR_ROOF, (sx, sy, TILE, TILE // 2))
         pygame.draw.rect(screen, (40, 20, 10), r, 1)
 
     def _draw_gate(self, screen, sx, sy, r):
+        """Ворота: камень + цветной прямоугольник (зелёный если открыты)."""
         pygame.draw.rect(screen, COLOR_STONE, r)
         color = (90, 200, 100) if self.gate_open else COLOR_GATE
         pygame.draw.rect(screen, color,
                          (sx + 6, sy + 4, TILE - 12, TILE - 8), 3)
 
     def _draw_well(self, screen, sx, sy, r):
-        """Колодец — вход в подземелье."""
+        """Колодец — вход в подземелье: тёмный круг внутри каменного."""
         pygame.draw.rect(screen, COLOR_GRASS_DARK, r)
         pygame.draw.circle(screen, COLOR_STONE,
                            (sx + TILE // 2, sy + TILE // 2), TILE // 2 - 2)
@@ -360,11 +431,10 @@ class World:
             (sx + TILE // 2 + 6, sy + 18),
         ])
 
-    def _draw_mountain(self, screen, r):
+    def _draw_mountain(self, screen, sx, sy, r):
         """Горный тайл: серый камень с тёмными трещинами."""
         pygame.draw.rect(screen, COLOR_MOUNTAIN, r)
         pygame.draw.rect(screen, COLOR_MOUNTAIN_DARK, r, 2)
-        sx, sy = r[0], r[1]
         pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
                          (sx + 10, sy + 12), (sx + 18, sy + 22), 2)
         pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,

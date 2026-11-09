@@ -105,14 +105,6 @@ asyncio.run( custom_site() )
 
 
 
-
-
-
-
-
-
-
-
 # BEGIN BLOCK
 #
 # now this is the html part you can (and should) customize
@@ -222,18 +214,23 @@ function show_infobox() {
         canvas.emscripten {
             border: 0px none;
             background-color: transparent;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
 
+            /* СЖАТИЕ ИСПРАВЛЕНО: сохраняем пропорции 960x640 */
+            max-width: 100vw;
+            max-height: 100vh;
+            width: auto;
+            height: auto;
+            aspect-ratio: {{cookiecutter.width}} / {{cookiecutter.height}};
+
+            z-index: 5;
             padding: 0;
             margin: 0 auto;
 
+            /* Центрируем canvas по центру экрана */
             position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
         body {
@@ -241,6 +238,7 @@ function show_infobox() {
             margin: 0;
             padding: none;
             background-color:powderblue;
+            overflow: hidden;
         }
 
         .topright{

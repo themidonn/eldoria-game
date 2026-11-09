@@ -4,6 +4,12 @@ world/camera.py — Камера, следящая за игроком.
 Камера центрируется на целевой точке (обычно — центр игрока),
 применяет опциональную тряску и затем ограничивает себя
 краями карты, чтобы не показывать пустоту за границей мира.
+
+Используется в game.py:
+  - _reset() — создаёт экземпляр
+  - enter_dungeon() / exit_dungeon() — новый экземпляр (сброс позиции)
+  - _update_level_1() / _update_level_2() — add_shake при уроне/смертях
+  - _update_common() — follow (каждый кадр)
 """
 
 import random
@@ -31,14 +37,26 @@ class Camera:
         """
         self.shake_amount = max(self.shake_amount, amount)
 
-    def follow(self, tx, ty, world_w, world_h):
+    def follow(self, tx, ty, world_w, world_h, dt=None):
         """
         Центрируется на точке (tx, ty), применяет тряску и кламп.
 
-        tx, ty — координаты цели (обычно центр игрока).
-        world_w, world_h — размеры мира в тайлах.
+        Параметры:
+          tx, ty           — координаты цели (обычно центр игрока)
+          world_w, world_h — размеры мира в тайлах
+          dt               — мс с прошлого кадра (необязательно).
+                             Если передан — затухание тряски
+                             frame-independent (как в остальном
+                             проекте: bat.py, boss.py, player.py).
+                             Если None — старое поведение (затухание
+                             на 1 px за кадр, зависит от FPS).
+
+        Обратная совместимость: game.py вызывает follow(x, y, w, h)
+        без dt — работает как раньше.
         """
         # --- Позиция относительно центра экрана ---
+        # WIDTH // 2 — int, int(tx - ...) отрезает дробную часть:
+        # камера не должна «дрожать» на субпикселях при движении игрока.
         self.x = int(tx - WIDTH // 2)
         self.y = int(ty - HEIGHT // 2)
 
@@ -48,8 +66,25 @@ class Camera:
         if self.shake_amount > 0:
             self.x += random.randint(-self.shake_amount, self.shake_amount)
             self.y += random.randint(-self.shake_amount, self.shake_amount)
-            self.shake_amount -= 1      # затухание на 1 px за кадр
+
+            # Затухание. dt=None — 1 px за кадр (старое поведение).
+            # dt передан — масштабируем к 1 кадру при 60 FPS:
+            # при 30 FPS тряска затухает так же по времени, но за
+            # меньшее число кадров.
+            if dt is None:
+                self.shake_amount -= 1
+            else:
+                self.shake_amount -= max(1, int(dt / 16.67))
+
+            # Защита: не даём уйти в минус (хотя проверка > 0 выше
+            # и так не пустит в отрицательные значения).
+            self.shake_amount = max(0, self.shake_amount)
 
         # --- Ограничение краями карты ---
+        # Если мир меньше экрана (world_w * TILE < WIDTH), выражение
+        # max(0, min(self.x, отрицательное)) даст 0 — камера застрянет
+        # в левом верхнем углу. Это осознанно: лучше показать угол
+        # карты, чем пустоту сбоку. Для реальных карт (180×130 тайлов
+        # при WIDTH=960, HEIGHT=640) это условие не выполняется.
         self.x = max(0, min(self.x, world_w * TILE - WIDTH))
         self.y = max(0, min(self.y, world_h * TILE - HEIGHT))

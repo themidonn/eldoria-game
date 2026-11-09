@@ -6,6 +6,15 @@ world/dungeon.py — Подземелье (второй уровень).
 
 Структура как у World (w, h, tiles, is_walkable_*, draw) —
 благодаря этому game.py может переключать карты прозрачно.
+
+Используется в game.py:
+  - _ensure_dungeon() — создаёт экземпляр (один на игру)
+  - _update_level_2() — update (мерцание факелов)
+  - _draw_level_2() — draw
+
+ВАЖНО: конструктор создаёт pygame.Surface для свечения факелов —
+перед созданием Dungeon должен быть вызван pygame.display.init().
+В main.py это гарантировано: init до импорта Game.
 """
 
 import math
@@ -61,6 +70,7 @@ class Dungeon:
 
     def _make_glow(self):
         """Создаёт готовую Surface свечения факела (один раз)."""
+        # SRCALPHA + alpha через цвет — Pygbag-safe.
         surf = pygame.Surface((self.GLOW_SIZE, self.GLOW_SIZE), pygame.SRCALPHA)
         half = self.GLOW_SIZE // 2
         pygame.draw.circle(surf, self.GLOW_OUTER, (half, half), 35)
@@ -86,7 +96,16 @@ class Dungeon:
                 self.tiles[ty][tx] = DARK_FLOOR
 
     def _generate_pillars(self):
-        """Ставит колонны 2×2 в узлах сетки с шагом PILLAR_STEP."""
+        """
+        Ставит колонны 2×2 в узлах сетки с шагом PILLAR_STEP.
+
+        Если HEIGHT_TILES / WIDTH_TILES окажутся меньше 2 × PILLAR_STEP,
+        цикл не выполнится и колонн не будет — это не баг, а следствие
+        геометрии. При дефолтных размерах (40×25) колонн 21:
+        по X: 5, 10, 15, 20, 25, 30, 35 → 7 позиций
+        по Y: 5, 10, 15, 20 → 4 позиции (25 - 5 = 20, range(5, 20, 5))
+        Но часть колонн упирается в стены и обрезается условием ниже.
+        """
         step = self.PILLAR_STEP
         size = self.PILLAR_SIZE
         m = self.WALL_MARGIN
@@ -102,7 +121,10 @@ class Dungeon:
                             self.tiles[py][px] = STONE
 
     def _generate_stairs(self):
-        """Лестница вверх (выход) — левый нижний угол зала."""
+        """
+        Лестница вверх (выход) — левый нижний угол зала.
+        y = h - 4 = 21, x = 4 — внутри пола (WALL_MARGIN = 2).
+        """
         self.tiles[self.h - 4][4] = STAIRS_UP
 
     def _generate_torches(self):
@@ -130,14 +152,26 @@ class Dungeon:
     #   ЛОГИКА
     # ============================================================
     def update(self, dt):
-        """Обновляет фазу мерцания факелов."""
-        self.time += dt * 0.005
+        """
+        Обновляет фазу мерцания факелов.
+
+        time крутится в цикле, чтобы float не терял точность
+        при очень долгой игре (как в bat.py / key.py / pickup.py).
+        """
+        self.time = (self.time + dt * 0.005) % (2 * math.pi * 1000)
 
     # ============================================================
     #   КОЛЛИЗИИ
     # ============================================================
     def is_walkable_px(self, px, py):
-        """Проходим ли пиксель (px, py)? Пол и лестница — да, стены — нет."""
+        """
+        Проходим ли пиксель (px, py)? Пол и лестница — да, стены — нет.
+
+        Набор тайлов расширен (FLOOR, GRASS) для совместимости с World:
+        game.py вызывает is_walkable_rect на current_map, который может
+        быть и World, и Dungeon. В самом подземелье FLOOR и GRASS
+        не встречаются (только DARK_FLOOR, STONE, STAIRS_UP).
+        """
         tx, ty = int(px // TILE), int(py // TILE)
         if tx < 0 or ty < 0 or tx >= self.w or ty >= self.h:
             return False
@@ -149,6 +183,8 @@ class Dungeon:
         tx1, ty1 = int((x + w - 1) // TILE), int((y + h - 1) // TILE)
         for ty in range(ty0, ty1 + 1):
             for tx in range(tx0, tx1 + 1):
+                # Проверяем центр каждого тайла — так проще и надёжнее,
+                # чем проверять 4 угла прямоугольника.
                 if not self.is_walkable_px(tx * TILE + TILE // 2,
                                            ty * TILE + TILE // 2):
                     return False
@@ -162,7 +198,12 @@ class Dungeon:
         self._draw_torches(screen, cam)
 
     def _draw_tiles(self, screen, cam):
-        """Рисует видимые тайлы: стены, пол, лестницу."""
+        """
+        Рисует видимые тайлы: стены, пол, лестницу.
+
+        +2 тайла запаса по каждой оси — чтобы на краю экрана
+        не появлялась полоса пустоты при движении камеры.
+        """
         x0 = max(0, int(cam.x) // TILE)
         y0 = max(0, int(cam.y) // TILE)
         x1 = min(self.w, (int(cam.x) + WIDTH) // TILE + 2)
@@ -175,23 +216,34 @@ class Dungeon:
                 sy = int(ty * TILE - cam.y)
                 r = (sx, sy, TILE, TILE)
 
+                # --- Стена: каменный блок + тёмная обводка ---
                 if t == STONE:
                     pygame.draw.rect(screen, COLOR_STONE, r)
                     pygame.draw.rect(screen, (60, 60, 70), r, 2)
+
+                # --- Пол: тёмный кирпич + линии швов ---
                 elif t == DARK_FLOOR:
                     pygame.draw.rect(screen, COLOR_DARK_FLOOR, r)
-                    # Кирпичики на полу
+                    # Кирпичики на полу: горизонтальный шов по центру
+                    # + вертикальный шов в левой половине.
                     pygame.draw.line(screen, (50, 35, 35),
                                      (sx, sy + TILE // 2),
                                      (sx + TILE, sy + TILE // 2), 1)
                     pygame.draw.line(screen, (50, 35, 35),
                                      (sx + TILE // 2, sy),
                                      (sx + TILE // 2, sy + TILE // 2), 1)
+
+                # --- Лестница: 3 ступеньки + красная стрелка вверх ---
                 elif t == STAIRS_UP:
                     self._draw_stairs(screen, sx, sy)
 
     def _draw_stairs(self, screen, sx, sy):
-        """Отрисовка лестницы вверх (3 ступеньки + красная стрелка)."""
+        """
+        Отрисовка лестницы вверх (3 ступеньки + красная стрелка).
+
+        Стрелка направлена ВВЕРХ — визуально совпадает со смыслом:
+        лестница ведёт на поверхность (выход из подземелья).
+        """
         r = (sx, sy, TILE, TILE)
         pygame.draw.rect(screen, COLOR_STONE, r)
         for i in range(3):
@@ -205,7 +257,13 @@ class Dungeon:
         ])
 
     def _draw_torches(self, screen, cam):
-        """Рисует все факелы: свечение, палочка, огонь (3 слоя)."""
+        """
+        Рисует все факелы: свечение, палочка, огонь (3 слоя).
+
+        Оптимизация: факелы далеко за экраном пропускаются
+        (проверка с запасом TILE * 2 — на случай, если огонь
+        чуть выглядывает за край).
+        """
         for torch_tx, torch_ty in self.torches:
             tx_screen = int(torch_tx * TILE - cam.x) + TILE // 2
             ty_screen = int(torch_ty * TILE - cam.y) + TILE // 2
@@ -215,8 +273,12 @@ class Dungeon:
                     -TILE * 2 < ty_screen < HEIGHT + TILE * 2):
                 continue
 
-            # Смещение огня — синус с разной фазой для каждого факела
-            flicker_offset = math.sin(self.time + torch_tx * 0.7) * 2
+            # Смещение огня — синус с разной фазой для каждого факела.
+            # В фазу входят и tx, и ty: иначе факелы на верхней и нижней
+            # стене с одинаковым tx мерцали бы синхронно.
+            flicker_offset = math.sin(
+                self.time + torch_tx * 0.7 + torch_ty * 1.3
+            ) * 2
 
             # --- Свечение (готовый Surface) ---
             screen.blit(self._glow_surf,
