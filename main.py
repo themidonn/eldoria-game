@@ -14,6 +14,9 @@ main.py — точка входа в игру.
 с ошибкой AttributeError: module 'pygame' has no attribute 'init'.
 """
 
+import os
+os.environ["SDL_AUDIODRIVER"] = "dummy"
+
 import asyncio
 import pygame
 

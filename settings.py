@@ -27,9 +27,10 @@ PLAYER_INVULN_TIME     = 800  # мс
 #   ТАЙЛЫ
 #   FLOOR — резерв на будущее (не спавнится, в _draw_tile нет
 #           отрисовки: не добавляйте FLOOR в карты без отрисовки!),
-#   HOUSE — деревня, STAIRS_UP/DOWN — переходы между уровнями.
+#   HOUSE — деревня, STAIRS_UP/DOWN — переходы между уровнями,
+#   MOUNTAIN — горы (непроходимы), SWAMP — болото (проходимо).
 # ============================================================
-GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE, HOUSE, STAIRS_UP, STAIRS_DOWN = range(10)
+GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE, HOUSE, STAIRS_UP, STAIRS_DOWN, MOUNTAIN, SWAMP = range(12)
 
 # ============================================================
 #   ЗОНА СПАВНА КЛЮЧА
@@ -53,6 +54,10 @@ COLOR_SKY         = (30, 30, 40)
 COLOR_HOUSE       = (139, 69, 19)
 COLOR_ROOF        = (100, 40, 30)
 COLOR_STAIRS_UP   = (200, 100, 100)
+COLOR_MOUNTAIN    = (90, 85, 80)
+COLOR_MOUNTAIN_DARK = (60, 55, 50)
+COLOR_SWAMP       = (50, 80, 50)
+COLOR_SWAMP_BUBBLE = (70, 110, 70)
 
 # ============================================================
 #   ПАЛИТРА: ИГРОК

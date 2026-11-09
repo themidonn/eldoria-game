@@ -36,6 +36,9 @@ from ui.floating_text import FloatingText
 from ui.minimap import MiniMap
 from ui.particles import ParticleManager
 
+# Страницы вступления — разбиваем INTRO по точкам на отдельные предложения.
+# Показываем по одной за раз на весь экран.
+INTRO_PAGES = [s.strip() + "." for s in INTRO.split(".") if s.strip()]
 
 class Game:
     TOTAL_CRYSTALS = 3
@@ -59,12 +62,13 @@ class Game:
         self._has_save = save.exists()
 
     def _init_fonts(self):
-        self.font_title_big = pygame.font.SysFont('arial', 56, bold=True)
-        self.font_title_small = pygame.font.SysFont('arial', 24)
-        self.font_win_big = pygame.font.SysFont('arial', 64, bold=True)
-        self.font_win_small = pygame.font.SysFont('arial', 26)
-        self.font_hint_banner = pygame.font.SysFont('arial', 18, bold=True)
-        self.font_quest = pygame.font.SysFont('arial', 16, bold=True)
+        self.font_title_big = pygame.font.Font('arial', 56)
+        self.font_title_small = pygame.font.Font('arial', 24)
+        self.font_win_big = pygame.font.Font('arial', 64)
+        self.font_win_small = pygame.font.Font('arial', 26)
+        self.font_hint_banner = pygame.font.Font('arial', 18)
+        self.font_quest = pygame.font.Font('arial', 16)
+        self.font_intro = pygame.font.Font('arial', 28)
 
     def _make_quest_surface(self, text):
         q_text = self.font_quest.render(text, True, (255, 200, 100))
@@ -108,6 +112,38 @@ class Game:
         self.hint_enter = self._make_hint("E — войти в подземелье")
         self.hint_exit = self._make_hint("E — выйти на поверхность")
         self.hint_chest = self._make_hint("E — открыть сундук")
+
+        # Страницы вступления — каждая отрендерена в готовый Surface
+        self.intro_pages = [self._wrap_intro_page(p) for p in INTRO_PAGES]
+
+    def _wrap_intro_page(self, text):
+        """Рендерит страницу вступления: центрированные строки в Surface."""
+        max_w = WIDTH - 200
+        words = text.split()
+
+        # --- Разбиение на строки ---
+        lines, cur = [], ""
+        for w in words:
+            test = (cur + " " + w).strip()
+            if self.font_intro.size(test)[0] > max_w:
+                lines.append(cur)
+                cur = w
+            else:
+                cur = test
+        if cur:
+            lines.append(cur)
+
+        # --- Рендер в Surface (строки центрированы) ---
+        line_height = self.font_intro.get_linesize()
+        surf_h = line_height * len(lines)
+        page_surf = pygame.Surface((max_w, surf_h), pygame.SRCALPHA)
+
+        for j, line in enumerate(lines):
+            line_surf = self.font_intro.render(line, True, (220, 220, 240))
+            lx = (max_w - line_surf.get_width()) // 2
+            page_surf.blit(line_surf, (lx, j * line_height))
+
+        return page_surf
 
     def _make_hint(self, text):
         text_surf = self.font_hint_banner.render(text, True, (255, 255, 150))
@@ -154,6 +190,10 @@ class Game:
         self.quest_completed = False
         self.lore_reward_given = False
         self.banner_timer = 0
+
+        # Вступление
+        self.intro_page = 0
+        self.intro_page_changed_at = pygame.time.get_ticks()
 
         self._spawn()
 
@@ -328,6 +368,7 @@ class Game:
                 'hp': self.boss.hp if self.boss else 0,
                 'phase': self.boss.phase if self.boss else 'idle',
                 'charge_timer': self.boss.charge_timer if self.boss else 3.0,
+                'windup_timer': self.boss.windup_timer if self.boss else 0.0,
             },
         }
         if save.write(data):
@@ -386,6 +427,13 @@ class Game:
             self.boss.hp = int(b.get('hp', self.boss.max_hp))
             self.boss.phase = b.get('phase', 'idle')
             self.boss.charge_timer = float(b.get('charge_timer', 3.0))
+            self.boss.windup_timer = float(b.get('windup_timer', 0.0))
+            # Защита: не даём боссу «мгновенно выстрелить» после загрузки.
+            # Если сохранились в момент windup/charge — при загрузке
+            # босс спокойно стоит, и у игрока есть 1 сек на реакцию.
+            if self.boss.phase in ('charge', 'windup'):
+                self.boss.phase = 'idle'
+                self.boss.charge_timer = 1.0
 
         d = data.get('dungeon', {})
         if d.get('has_dungeon', False):
@@ -432,6 +480,7 @@ class Game:
                 self._handle_keydown(e.key)
 
     def _handle_keydown(self, key):
+        # --- Титульный экран ---
         if self.state == 'title':
             if self._has_save:
                 if key == pygame.K_RETURN:
@@ -441,24 +490,40 @@ class Game:
                     save.delete()
                     self._has_save = False
                     self._reset()
-                    self.state = 'playing'
+                    self.state = 'intro'
             else:
                 self._reset()
-                self.state = 'playing'
+                self.state = 'intro'
             return
 
+        # --- Экран вступления ---
+        if self.state == 'intro':
+            if key in (pygame.K_SPACE, pygame.K_RETURN):
+                self.intro_page += 1
+                self.intro_page_changed_at = pygame.time.get_ticks()
+                if self.intro_page >= len(self.intro_pages):
+                    self.state = 'playing'
+                    self.intro_page = 0
+            elif key == pygame.K_ESCAPE:
+                self.state = 'playing'
+                self.intro_page = 0
+            return
+
+        # --- Победа / поражение ---
         if self.state in ('win', 'lose'):
             if key == pygame.K_r:
                 save.delete()
                 self._has_save = False
                 self._reset()
-                self.state = 'playing'
+                self.state = 'playing'  # без вступления — уже видел
             return
 
+        # --- Диалог ---
         if self.dialog.active:
             self._handle_dialog_input(key)
             return
 
+        # --- Пауза ---
         if key == pygame.K_ESCAPE:
             self.state = 'paused' if self.state == 'playing' else 'playing'
             return
@@ -471,6 +536,7 @@ class Game:
                 self.save_progress()
             return
 
+        # --- Ручное сохранение ---
         if key == pygame.K_F5:
             self.save_progress()
             self.floating_texts.append(FloatingText(
@@ -479,6 +545,7 @@ class Game:
             ))
             return
 
+        # --- Атака / взаимодействие ---
         if key in (pygame.K_SPACE, pygame.K_j):
             self.player.try_attack()
         elif key == pygame.K_e:
@@ -855,6 +922,11 @@ class Game:
             pygame.display.flip()
             return
 
+        if self.state == 'intro':
+            self._draw_intro()
+            pygame.display.flip()
+            return
+
         self.world.draw(self.screen, self.camera)
 
         if self.level == 1:
@@ -985,6 +1057,48 @@ class Game:
     # ============================================================
     #   ЭКРАНЫ
     # ============================================================
+    def _draw_intro(self):
+        # --- Фон ---
+        self.screen.blit(self.overlay_black, (0, 0))
+
+        # --- Заголовок ---
+        title = self.font_title_small.render("Хроники Эльдории", True, (240, 210, 130))
+        self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 100))
+
+        subtitle = self.font_hint_banner.render(
+            "Тень над Священным Пламенем", True, (160, 160, 190)
+        )
+        self.screen.blit(subtitle, (WIDTH // 2 - subtitle.get_width() // 2, 140))
+
+        # --- Страница текста ---
+        if 0 <= self.intro_page < len(self.intro_pages):
+            page = self.intro_pages[self.intro_page]
+
+            # Плавное появление: alpha 0 → 255 за 300 мс
+            elapsed = pygame.time.get_ticks() - self.intro_page_changed_at
+            alpha = min(255, int(255 * elapsed / 300))
+            page.set_alpha(alpha)
+
+            px = WIDTH // 2 - page.get_width() // 2
+            py = 280
+            self.screen.blit(page, (px, py))
+
+        # --- Индикатор страниц (●○○○) ---
+        dots = ""
+        for i in range(len(self.intro_pages)):
+            dots += "●  " if i == self.intro_page else "○  "
+        dots_surf = self.font_title_small.render(dots.strip(), True, (180, 180, 200))
+        self.screen.blit(dots_surf, (WIDTH // 2 - dots_surf.get_width() // 2, HEIGHT - 160))
+
+        # --- Подсказки внизу ---
+        is_last = self.intro_page >= len(self.intro_pages) - 1
+        if is_last:
+            hint_text = "[Space] начать игру    [Esc] пропустить"
+        else:
+            hint_text = "[Space] далее    [Esc] пропустить"
+        hint = self.font_hint_banner.render(hint_text, True, (150, 150, 170))
+        self.screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, HEIGHT - 80))
+
     def _draw_title(self):
         t = self.font_title_big.render("Хроники Эльдории", True, (240, 210, 130))
         s = self.font_title_small.render("Тень над Священным Пламенем", True, (200, 200, 220))

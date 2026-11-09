@@ -27,7 +27,7 @@ class FloatingText:
     def __init__(self, x, y, text, color=COLOR_UI_TEXT, duration=1200):
         # Ленивая инициализация шрифта
         if FloatingText._font is None:
-            FloatingText._font = pygame.font.SysFont('arial', 22, bold=True)
+            FloatingText._font = pygame.font.Font('arial', 22)
 
         self.x = float(x)
         self.y = float(y)

@@ -1,5 +1,9 @@
 """
 entities/boss.py — Босс Морвейн: преследование игрока, рывки, HP-бар.
+
+Фазы: 'idle' → 'windup' (0.5 сек, телеграф) → 'charge' (рывок).
+В windup босс стоит, пульсирует красным и рисует полосу-предупреждение
+в направлении будущего рывка — игрок успевает среагировать.
 """
 
 import pygame
@@ -17,8 +21,9 @@ class Boss:
         self.hp = self.max_hp = 20
         self.speed = 1.0
         self.hit_flash = 0                    # мс — красная вспышка при ударе
-        self.phase = 'idle'                   # 'idle' или 'charge'
+        self.phase = 'idle'                   # 'idle' | 'windup' | 'charge'
         self.charge_timer = 3.0               # сек — перезарядка перед рывком
+        self.windup_timer = 0.0               # сек — сколько осталось до рывка
         self.charge_dir = (0, 0)              # нормализованное направление рывка
         self.dead = True                      # активируется после диалога со Старейшиной
 
@@ -65,6 +70,14 @@ class Boss:
                 # Упёрлись в стену — завершаем рывок
                 self.phase = 'idle'
 
+        # --- Фаза: Подготовка к рывку (телеграф) ---
+        elif self.phase == 'windup':
+            self.windup_timer -= dt / 1000.0
+            if self.windup_timer <= 0:
+                self.phase = 'charge'
+                self.charge_timer = 3.0
+            # Босс стоит на месте — рывок начнётся после таймера
+
         # --- Фаза: Преследование ---
         elif dist < 400:
             dx, dy = dx / dist, dy / dist
@@ -80,9 +93,9 @@ class Boss:
                 cx, cy = dx, dy
                 if cx == 0 and cy == 0:
                     cx, cy = 1.0, 0.0
-                self.phase = 'charge'
+                self.phase = 'windup'
                 self.charge_dir = (cx, cy)
-                self.charge_timer = 3.0
+                self.windup_timer = 0.5
 
         else:
             # Игрок ушёл далеко — не даём заряду «накопиться впрок».
@@ -108,8 +121,19 @@ class Boss:
         sx = int(self.x - cam.x)
         sy = int(self.y - cam.y)
 
+        # --- Телеграф рывка (рисуется ПОД боссом) ---
+        if self.phase == 'windup':
+            self._draw_windup_line(screen, sx, sy)
+
+        # --- Цвет тела: пульсирует в windup, вспышка от удара ---
+        if self.hit_flash > 0:
+            color = (255, 100, 100)
+        elif self.phase == 'windup' and (pygame.time.get_ticks() // 100) % 2 == 0:
+            color = (255, 100, 100)   # «мигаем» красным в телеграфе
+        else:
+            color = COLOR_BOSS
+
         # --- Тело (овал + обводка) ---
-        color = (255, 100, 100) if self.hit_flash > 0 else COLOR_BOSS
         pygame.draw.ellipse(screen, color, (sx, sy + 10, self.w, self.h - 10))
         pygame.draw.ellipse(screen, (50, 10, 20),
                             (sx, sy + 10, self.w, self.h - 10), 3)
@@ -130,3 +154,27 @@ class Boss:
             fill = int(bw * self.hp / self.max_hp)
             pygame.draw.rect(screen, (200, 40, 60), (bx, by, fill, bh), border_radius=4)
             pygame.draw.rect(screen, (240, 200, 100), (bx, by, bw, bh), 2, border_radius=4)
+
+    def _draw_windup_line(self, screen, sx, sy):
+        """Рисует полупрозрачную полосу-предупреждение в направлении рывка.
+
+        Использует серию кружков вместо Surface с alpha — Pygbag-safe.
+        Цвет пульсирует синхронно с миганием босса.
+        """
+        cx = sx + self.w // 2
+        cy = sy + self.h // 2
+        dx, dy = self.charge_dir
+
+        # Пульсация цвета: 2 оттенка, смена каждые 100 мс
+        if (pygame.time.get_ticks() // 100) % 2 == 0:
+            color = (220, 60, 60)
+        else:
+            color = (160, 40, 40)
+
+        # Серия кружков вдоль направления — «дорожка» длиной ~250 px
+        for i in range(1, 13):
+            dist = i * 20
+            px = int(cx + dx * dist)
+            py = int(cy + dy * dist)
+            radius = max(2, 6 - i // 4)   # к концу чуть тоньше
+            pygame.draw.circle(screen, color, (px, py), radius)
