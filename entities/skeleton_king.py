@@ -167,11 +167,11 @@ class SkeletonKing:
             (cx + 14, sy + 8),
         ], 1)
 
-        # --- HP-бар (только если босс в кадре) ---
+        # --- HP-бар сверху экрана (только если босс в кадре) ---
         if -self.w < sx < WIDTH and -self.h < sy < HEIGHT:
             bw, bh = 240, 18
             bx = WIDTH // 2 - bw // 2
-            by = HEIGHT - 50
+            by = 20
 
             pygame.draw.rect(screen, (30, 20, 40), (bx, by, bw, bh),
                              border_radius=4)

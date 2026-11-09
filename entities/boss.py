@@ -120,11 +120,11 @@ class Boss:
         pygame.draw.circle(screen, (0, 0, 0),      (sx + 18, sy + 30), 2)
         pygame.draw.circle(screen, (0, 0, 0),      (sx + self.w - 18, sy + 30), 2)
 
-        # --- HP-бар внизу экрана (только когда босс в кадре) ---
+        # --- HP-бар сверху экрана (только если босс в кадре) ---
         if -self.w < sx < WIDTH and -self.h < sy < HEIGHT:
             bw, bh = 200, 18
             bx = WIDTH // 2 - bw // 2
-            by = HEIGHT - 50
+            by = 20
 
             pygame.draw.rect(screen, (50, 20, 30),  (bx, by, bw, bh), border_radius=4)
             fill = int(bw * self.hp / self.max_hp)
