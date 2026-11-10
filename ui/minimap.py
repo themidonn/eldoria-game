@@ -17,6 +17,8 @@ _to_mini использует self._world_w / self._world_h, сохранённ�
 в конструкторе, а не game.world. Это защищает от бага, если
 мини-карту когда-нибудь нарисуют в подземелье (game.world будет
 Dungeon, а карта — от main_world).
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -25,9 +27,7 @@ from settings import *
 
 class MiniMap:
 
-    # ============================================================
-    #   КОНСТАНТЫ
-    # ============================================================
+    # region КОНСТАНТЫ
     # SCALE = 1.0 — карта 180×130 тайлов → 180×130 px.
     # 1 тайл = 1 пиксель. Дальше уменьшать нельзя — тайлы
     # станут меньше пикселя и карта превратится в кашу.
@@ -52,10 +52,9 @@ class MiniMap:
     _DOT_CRYSTAL = COLOR_CRYSTAL      # голубой
     _DOT_BOSS    = (255, 50, 50)      # ярко-красный
     _DOT_PLAYER  = (255, 255, 255)    # белый
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, world):
         # --- Размеры мини-карты (от исходной карты) ---
         self.w = int(world.w * self.SCALE)
@@ -79,10 +78,11 @@ class MiniMap:
 
         # --- Зона ключа (подсветка, пока квест активен) ---
         self._build_key_zone()
+    # endregion
 
-    # ============================================================
-    #   ВНУТРЕННИЕ МЕТОДЫ
-    # ============================================================
+    # region ВНУТРЕННИЕ МЕТОДЫ
+
+    # region _render_tiles
     def _render_tiles(self, world):
         """
         Рисует рельеф с округлением границ тайлов — без щелей и наложений.
@@ -110,7 +110,9 @@ class MiniMap:
 
         # Рамка мини-карты
         pygame.draw.rect(self.bg, (200, 180, 120), (0, 0, self.w, self.h), 2)
+    # endregion
 
+    # region _build_key_zone
     def _build_key_zone(self):
         """
         Строит подсветку зоны спавна ключа (KEY_ZONE_* из settings).
@@ -132,7 +134,9 @@ class MiniMap:
         # SRCALPHA + alpha через цвет — Pygbag-safe.
         self.zone_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
         self.zone_surf.fill((255, 255, 255, 50))
+    # endregion
 
+    # region _to_mini
     def _to_mini(self, wx, wy, game):
         """
         Преобразует мировые координаты (пиксели) в координаты мини-карты.
@@ -148,7 +152,9 @@ class MiniMap:
         mx = self.x + int((wx / (self._world_w * TILE)) * self.w)
         my = self.y + int((wy / (self._world_h * TILE)) * self.h)
         return mx, my
+    # endregion
 
+    # region _is_key_quest_active
     def _is_key_quest_active(self, game):
         """
         Квест Жителя активен, если ВСЕ условия выполнены:
@@ -161,10 +167,13 @@ class MiniMap:
                 and not game.villager_refused
                 and not game.has_key
                 and not game.quest_completed)
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # endregion (ВНУТРЕННИЕ МЕТОДЫ)
+
+    # region ОТРИСОВКА
+
+    # region draw
     def draw(self, screen, game):
         # --- Фон + рельеф ---
         screen.blit(self.bg, (self.x, self.y))
@@ -178,7 +187,9 @@ class MiniMap:
 
         # --- Точки поверх фона ---
         self._draw_dots(screen, game)
+    # endregion
 
+    # region _draw_dots
     def _draw_dots(self, screen, game):
         # --- NPC (все, кто есть на карте) ---
         for npc in game.npcs:
@@ -201,3 +212,6 @@ class MiniMap:
         # --- Игрок (всегда) ---
         px, py = self._to_mini(game.player.x, game.player.y, game)
         pygame.draw.circle(screen, self._DOT_PLAYER, (px, py), 3)
+    # endregion
+
+    # endregion (ОТРИСОВКА)

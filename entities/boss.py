@@ -15,6 +15,8 @@ entities/boss.py — Босс Морвейн: преследование игр�
   - _spawn() — создаёт экземпляр (dead = True)
   - _update_level_1() — update + take_damage
   - _draw_level_1() — draw
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -23,9 +25,7 @@ from settings import *
 
 class Boss:
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y):
         # --- Позиция и размеры ---
         self.x, self.y = float(x), float(y)
@@ -47,17 +47,15 @@ class Boss:
         # Босс «мёртв» до активации: game.py выставляет dead = False
         # после диалога со Старейшиной (когда собраны все 3 кристалла).
         self.dead = True
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
     def update(self, player, world, dt):
         if self.dead:
             return
@@ -79,7 +77,10 @@ class Boss:
         dist = (dx * dx + dy * dy) ** 0.5
         if dist < 0.01:
             # Защита от деления на ноль: игрок и босс в одной точке.
-            dist = 1.0
+            # Заодно задаём валидное направление (1, 0), иначе после
+            # нормализации dx, dy остались бы ~(0, 0), и рывок был бы
+            # нулевым (босс «зависает» в фазе charge).
+            dx, dy, dist = 1.0, 0.0, 1.0
 
         # --- Фаза: Рывок ---
         if self.phase == 'charge':
@@ -97,7 +98,8 @@ class Boss:
                 moved = True
             if not moved:
                 # Упёрлись в стену — завершаем рывок.
-                # charge_timer уже 3.0 (выставлен при переходе windup → charge).
+                # charge_timer не сбрасываем: он выставлен в 3.0
+                # при переходе windup → charge и уже тикает.
                 self.phase = 'idle'
 
         # --- Фаза: Подготовка к рывку (телеграф) ---
@@ -118,9 +120,8 @@ class Boss:
                 self.y += dy * s
 
             if self.charge_timer <= 0:
-                # Fallback на случай, если игрок оказался ровно в точке босса:
-                # без него charge_dir стал бы (0, 0), и босс завис бы
-                # в вечном charge (шаг 0, moved = False, но не упёрся).
+                # Fallback на случай, если игрок оказался ровно в точке
+                # босса (страховка, хотя dist<0.01 уже обработан выше).
                 cx, cy = dx, dy
                 if cx == 0 and cy == 0:
                     cx, cy = 1.0, 0.0
@@ -149,10 +150,9 @@ class Boss:
         self.hit_flash = 200
         if self.hp <= 0:
             self.dead = True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.dead:
             return
@@ -225,3 +225,4 @@ class Boss:
             py = int(cy + dy * dist)
             radius = max(2, 6 - i // 4)   # к концу чуть тоньше
             pygame.draw.circle(screen, color, (px, py), radius)
+    # endregion

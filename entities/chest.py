@@ -11,17 +11,16 @@ entities/chest.py — Сундук с сокровищем.
   - _try_open_chest() — проверяет близость, ставит opened = True
   - _draw_level_2() / _draw_hints() — отрисовка и подсказка
   - save_progress() / load_progress() — сохраняет opened
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
-from settings import *
 
 
 class Chest:
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y):
         # float() — для консистентности с bat.py / boss.py / skeleton.py.
         # Сундук не двигается, но float-арифметика в rect и draw
@@ -29,23 +28,21 @@ class Chest:
         self.x = float(x)
         self.y = float(y)
 
-        # Размер тела: 32×28 — чуть меньше тайла (TILE = 32).
+        # Размер тела: 32×28 — компактнее тайла (TILE = 40).
         # Тело занимает нижние 18 px (self.h - 10), крышка — верхние 10.
         self.w, self.h = 32, 28
 
         # Открыт ли сундук (сохраняется в save_progress)
         self.opened = False
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         # int() для совместимости с WebAssembly (Pygbag не принимает float)
         sx = int(self.x - cam.x)
@@ -101,3 +98,4 @@ class Chest:
         pygame.draw.line(screen, GOLD,
                          (sx + self.w - 6, sy + 14),
                          (sx + self.w - 6, sy + self.h), 2)
+    # endregion

@@ -18,6 +18,8 @@ entities/skeleton_king.py — Король Скелетов: босс подзе
   - enraged = True при hp <= max_hp // 2 (15 HP)
   - в enraged: speed 0.9 → 1.5, shoot_interval 2.0 → 1.2
   - глаза меняют цвет: тускло-красные → ярко-красные
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -26,9 +28,7 @@ from settings import *
 
 class SkeletonKing:
 
-    # ============================================================
-    #   ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
-    # ============================================================
+    # region ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
     BONE       = (230, 230, 210)     # кости
     BONE_D     = (160, 160, 140)     # тень костей
     MANTLE     = (40, 30, 50)        # мантия
@@ -37,10 +37,9 @@ class SkeletonKing:
     CROWN_D    = (160, 120, 30)      # обводка короны
     EYE_NORMAL = (150, 60, 60)       # глаза (1 фаза)
     EYE_RAGE   = (255, 60, 60)       # глаза (2 фаза)
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y):
         # --- Позиция и размеры ---
         self.x = float(x)
@@ -65,17 +64,17 @@ class SkeletonKing:
 
         # --- Флаг «второй фазы» (при HP <= 50%) ---
         self.enraged = False
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
+
+    # region update (фазы, стрельба, преследование)
     def update(self, player, world, dt, projectiles):
         """
         Обновляет состояние босса.
@@ -128,7 +127,9 @@ class SkeletonKing:
                 self.x += dx * s
             if world.is_walkable_rect(self.x, self.y + dy * s, self.w, self.h):
                 self.y += dy * s
+    # endregion
 
+    # region _shoot
     def _shoot(self, player, projectiles):
         """
         Стреляет 1 костяным копьём в сторону игрока.
@@ -151,7 +152,9 @@ class SkeletonKing:
         px = self.x + self.w / 2 - half
         py = self.y + self.h / 2 - half
         projectiles.append(BoneProjectile(px, py, dx, dy))
+    # endregion
 
+    # region take_damage
     def take_damage(self, dmg, fx, fy):
         """
         Наносит урон. Босса нельзя отбросить — параметры fx, fy
@@ -167,10 +170,11 @@ class SkeletonKing:
         self.hit_flash = 200
         if self.hp <= 0:
             self.dead = True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # endregion (ЛОГИКА)
+
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.dead:
             return
@@ -243,20 +247,19 @@ class SkeletonKing:
                              (bx, by, fill, bh), border_radius=4)
             pygame.draw.rect(screen, (240, 200, 100),
                              (bx, by, bw, bh), 2, border_radius=4)
+    # endregion
 
 
-# ============================================================
-#   СНАРЯД — КОСТЯНОЕ КОПЬЁ
-# ============================================================
+# region КЛАСС: BoneProjectile (снаряд-копьё)
 class BoneProjectile:
 
+    # region КОНСТАНТЫ
     # Размер снаряда (8×8). Используется в SkeletonKing._shoot
     # для центрирования спавна.
     SIZE = 8
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y, dx, dy):
         # --- Позиция и размеры ---
         # self.x, self.y — левый верхний угол hitbox (как у всех entity).
@@ -275,17 +278,15 @@ class BoneProjectile:
         self.life = 2000
 
         self.dead = False
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
     def update(self, world, dt):
         if self.dead:
             return
@@ -309,10 +310,9 @@ class BoneProjectile:
         self.life -= dt
         if self.life <= 0:
             self.dead = True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.dead:
             return
@@ -325,3 +325,5 @@ class BoneProjectile:
         # Центр = (sx + 4, sy + 4), радиус 4 — ровно по размеру hitbox 8×8.
         pygame.draw.circle(screen, (240, 230, 200), (sx + 4, sy + 4), 4)
         pygame.draw.circle(screen, (160, 140, 110), (sx + 4, sy + 4), 4, 1)
+    # endregion
+# endregion (BoneProjectile)

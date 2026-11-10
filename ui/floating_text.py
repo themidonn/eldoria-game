@@ -18,6 +18,8 @@ ui/floating_text.py — Всплывающий текст над игроком.
 ВАЖНО: конструктор вызывает pygame.font.Font() —
 перед созданием FloatingText должен быть вызван pygame.font.init().
 В main.py это гарантировано: init до импорта Game.
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -26,9 +28,7 @@ from settings import *
 
 class FloatingText:
 
-    # ============================================================
-    #   КЛАССОВЫЙ КЭШ (общий для всех экземпляров)
-    # ============================================================
+    # region КЛАССОВЫЙ КЭШ (общий для всех экземпляров)
     # Шрифт один на все всплывающие тексты — ленивая инициализация
     # при создании первого экземпляра.
     _font = None
@@ -36,10 +36,9 @@ class FloatingText:
     # Доля жизни, после которой начинается затухание.
     # 0.6 = первые 60% жизни текст полностью виден.
     FADE_START = 0.6
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y, text, color=COLOR_UI_TEXT, duration=1200):
         # --- Ленивая инициализация шрифта ---
         # Один раз на весь класс — не грузим ttf для каждого текста.
@@ -64,10 +63,9 @@ class FloatingText:
         # В draw() только set_alpha + blit.
         self.text_surf   = FloatingText._font.render(text, True, color)
         self.shadow_surf = FloatingText._font.render(text, True, (0, 0, 0))
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
     def update(self, dt):
         # Мёртвый текст не двигается — game.py отфильтрует его
         # в _update_common сразу после вызова update.
@@ -80,10 +78,9 @@ class FloatingText:
 
         if self.elapsed >= self.duration:
             self.dead = True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.dead:
             return
@@ -114,3 +111,4 @@ class FloatingText:
         # Тень даёт читаемость на любом фоне (трава, камень, тёмная мантия).
         screen.blit(self.shadow_surf, (sx + 1, sy + 1))
         screen.blit(self.text_surf,   (sx, sy))
+    # endregion

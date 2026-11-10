@@ -15,6 +15,8 @@ entities/skeleton.py — Скелет: медленный, но крепкий �
       * если скелет ушёл от home — возвращается (порог 8 px)
       * если дома — патрулирует влево-вправо (±20 px от home_x)
   - Игрок близко (< 220 px): преследует с полной скоростью
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -22,16 +24,13 @@ import pygame
 
 class Skeleton:
 
-    # ============================================================
-    #   ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
-    # ============================================================
+    # region ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
     BONE   = (220, 220, 200)     # кости
     BONE_D = (140, 140, 120)     # тень костей
     DARK   = (30, 30, 40)        # глазницы
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y, hp=4):
         # --- Позиция и размеры ---
         self.x = float(x)
@@ -57,17 +56,17 @@ class Skeleton:
         self.home_y = float(y)
         self.patrol_dir = 1          # 1 — вправо, -1 — влево
         self.patrol_timer = 0.0      # сек — до следующего разворота
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
+
+    # region update (преследование / возврат / патруль)
     def update(self, player, world, dt):
         if self.dead:
             return
@@ -130,7 +129,9 @@ class Skeleton:
                     self.patrol_dir *= -1
                 else:
                     self.x = new_x
+    # endregion
 
+    # region _try_move
     def _try_move(self, nx, ny, world):
         """
         Пытается сдвинуть скелета в (nx, ny) с проверкой коллизий по осям.
@@ -142,7 +143,9 @@ class Skeleton:
             self.x = nx
         if world.is_walkable_rect(self.x, ny, self.w, self.h):
             self.y = ny
+    # endregion
 
+    # region take_damage
     def take_damage(self, dmg, fx, fy):
         """
         Наносит урон. Скелета нельзя отбросить — параметры fx, fy
@@ -158,10 +161,11 @@ class Skeleton:
         self.hit_flash = 200
         if self.hp <= 0:
             self.dead = True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # endregion (ЛОГИКА)
+
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.dead:
             return
@@ -196,3 +200,4 @@ class Skeleton:
                            (sx + self.w // 2 - 2, sy + 6), 1)
         pygame.draw.circle(screen, self.DARK,
                            (sx + self.w // 2 + 2, sy + 6), 1)
+    # endregion

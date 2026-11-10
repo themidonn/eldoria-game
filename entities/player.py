@@ -6,6 +6,7 @@ entities/player.py — Игрок: движение, атака, здоровь�
 - Направление взгляда: 4 стороны (не 8) — так проще для удара мечом.
 - Атака: короткий таймер + кулдаун.
 - Неуязвимость после урона + мигание спрайта.
+- Замедление в болоте (тайл SWAMP под центром игрока).
 
 Используется в game.py:
   - _reset() — создаёт экземпляр
@@ -17,6 +18,8 @@ entities/player.py — Игрок: движение, атака, здоровь�
   - draw() — отрисовка
   - save_progress() / load_progress() — сохраняет hp, max_hp, damage,
     weapon_upgraded, crystals
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -25,18 +28,15 @@ from settings import *
 
 class Player:
 
-    # ============================================================
-    #   ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
-    # ============================================================
+    # region ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
     BODY_COLOR = COLOR_PLAYER           # тело
     OUTLINE    = (20, 20, 30)           # обводка
     EYE_WHITE  = (255, 255, 255)        # белок глаза
     EYE_BLACK  = (0, 0, 0)              # зрачок
     SWORD_EDGE = (150, 150, 160)        # обводка меча
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y):
         # --- Позиция и размеры ---
         self.x, self.y = float(x), float(y)
@@ -58,17 +58,17 @@ class Player:
         self.crystals = 0               # сколько кристаллов собрано (0..3)
         self.damage = PLAYER_ATTACK_DAMAGE
         self.weapon_upgraded = False    # True после квеста Жителя
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
+
+    # region update (движение, таймеры, болото)
     def update(self, keys, dt, world):
         # --- Таймеры ---
         # max(0, ...) — защита от отрицательных значений при большом dt.
@@ -125,7 +125,9 @@ class Player:
             self.x += dx * speed
         if world.is_walkable_rect(self.x, self.y + dy * speed, self.w, self.h):
             self.y += dy * speed
+    # endregion
 
+    # region try_attack
     def try_attack(self):
         """
         Запускает атаку, если кулдаун истёк.
@@ -139,7 +141,9 @@ class Player:
         if self.attack_cooldown <= 0:
             self.attack_timer = PLAYER_ATTACK_DURATION
             self.attack_cooldown = PLAYER_ATTACK_COOLDOWN
+    # endregion
 
+    # region upgrade_weapon
     def upgrade_weapon(self):
         """
         Прокачка меча: урон 1 → 2, золотой цвет в draw().
@@ -150,7 +154,9 @@ class Player:
         """
         self.damage = 2
         self.weapon_upgraded = True
+    # endregion
 
+    # region get_attack_hitbox
     def get_attack_hitbox(self):
         """
         Возвращает pygame.Rect зоны удара или None, если атака не идёт.
@@ -167,7 +173,9 @@ class Player:
         cy = self.y + self.h / 2 + dy * (PLAYER_ATTACK_RANGE / 2 + self.h / 2)
         r = PLAYER_ATTACK_RANGE
         return pygame.Rect(int(cx - r / 2), int(cy - r / 2), int(r), int(r))
+    # endregion
 
+    # region take_damage
     def take_damage(self, dmg=1):
         """
         Возвращает True, если урон прошёл (не в invuln).
@@ -185,10 +193,11 @@ class Player:
         self.hp = max(0, self.hp - dmg)
         self.invuln = PLAYER_INVULN_TIME
         return True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # endregion (ЛОГИКА)
+
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         # --- Мигание при неуязвимости ---
         # Синхронизировано с началом invuln (а не с глобальным временем) —
@@ -227,3 +236,4 @@ class Player:
                                if self.weapon_upgraded else COLOR_SWORD)
                 pygame.draw.rect(screen, sword_color, sr, border_radius=6)
                 pygame.draw.rect(screen, self.SWORD_EDGE, sr, 2, border_radius=6)
+    # endregion

@@ -15,6 +15,8 @@ world/dungeon.py — Подземелье (второй уровень).
 ВАЖНО: конструктор создаёт pygame.Surface для свечения факелов —
 перед созданием Dungeon должен быть вызван pygame.display.init().
 В main.py это гарантировано: init до импорта Game.
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import math
@@ -22,11 +24,10 @@ import pygame
 from settings import *
 
 
+# region КЛАСС: Dungeon
 class Dungeon:
 
-    # ============================================================
-    #   КОНСТАНТЫ
-    # ============================================================
+    # region КОНСТАНТЫ
     # Размер зала в тайлах
     WIDTH_TILES  = 40
     HEIGHT_TILES = 25
@@ -43,19 +44,18 @@ class Dungeon:
     TORCH_STEP  = 6
 
     # Цвета огня (3 слоя)
-    FIRE_OUTER = (255, 80, 20)   # красный
-    FIRE_MID   = (255, 160, 40)  # оранжевый
-    FIRE_INNER = (255, 240, 120) # жёлтый
-    TORCH_STICK = (80, 50, 30)   # деревянная палочка
+    FIRE_OUTER  = (255, 80, 20)   # красный
+    FIRE_MID    = (255, 160, 40)  # оранжевый
+    FIRE_INNER  = (255, 240, 120) # жёлтый
+    TORCH_STICK = (80, 50, 30)    # деревянная палочка
 
     # Свечение факела (готовый Surface 80×80)
-    GLOW_SIZE   = 80
-    GLOW_INNER  = (255, 200, 80, 60)   # центр
-    GLOW_OUTER  = (255, 140, 50, 40)   # ореол
+    GLOW_SIZE  = 80
+    GLOW_INNER = (255, 200, 80, 60)   # центр
+    GLOW_OUTER = (255, 140, 50, 40)   # ореол
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self):
         self.w = self.WIDTH_TILES
         self.h = self.HEIGHT_TILES
@@ -76,10 +76,9 @@ class Dungeon:
         pygame.draw.circle(surf, self.GLOW_OUTER, (half, half), 35)
         pygame.draw.circle(surf, self.GLOW_INNER, (half, half), 20)
         return surf
+    # endregion
 
-    # ============================================================
-    #   ГЕНЕРАЦИЯ
-    # ============================================================
+    # region ГЕНЕРАЦИЯ
     def generate(self):
         self._generate_walls_and_floor()
         self._generate_pillars()
@@ -99,12 +98,15 @@ class Dungeon:
         """
         Ставит колонны 2×2 в узлах сетки с шагом PILLAR_STEP.
 
-        Если HEIGHT_TILES / WIDTH_TILES окажутся меньше 2 × PILLAR_STEP,
-        цикл не выполнится и колонн не будет — это не баг, а следствие
-        геометрии. При дефолтных размерах (40×25) колонн 21:
-        по X: 5, 10, 15, 20, 25, 30, 35 → 7 позиций
-        по Y: 5, 10, 15, 20 → 4 позиции (25 - 5 = 20, range(5, 20, 5))
-        Но часть колонн упирается в стены и обрезается условием ниже.
+        При дефолтных размерах (WIDTH_TILES=40, HEIGHT_TILES=25,
+        PILLAR_STEP=5, PILLAR_SIZE=2):
+          по X: range(5, 35, 5) = 5, 10, 15, 20, 25, 30 → 6 позиций
+          по Y: range(5, 20, 5) = 5, 10, 15         → 3 позиции
+          итого 18 колонн × 4 тайла = 72 тайла стен.
+
+        Условие `m <= px < w - m` при дефолтных значениях не срабатывает
+        (max px = 31 < 38, max py = 16 < 23) — оно защита на случай,
+        если кто-то уменьшит карту или увеличит шаг/размер колонны.
         """
         step = self.PILLAR_STEP
         size = self.PILLAR_SIZE
@@ -128,7 +130,13 @@ class Dungeon:
         self.tiles[self.h - 4][4] = STAIRS_UP
 
     def _generate_torches(self):
-        """Факелы по периметру зала: сверху, снизу, слева, справа."""
+        """
+        Факелы по периметру зала: сверху, снизу, слева, справа.
+
+        Позиции (x=1, x=w-2, y=1, y=h-2) — это внутренний слой стен
+        при WALL_MARGIN=2. Факелы не пересекаются с колоннами:
+        колонны начинаются с ty=5, а факелы на ty=1 или ty=h-2.
+        """
         start = self.TORCH_START
         step  = self.TORCH_STEP
 
@@ -147,10 +155,9 @@ class Dungeon:
         # Правая стена (x=w-2)
         for ty in range(start + 1, self.h - start - 1, step):
             self.torches.append((self.w - 2, ty))
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
     def update(self, dt):
         """
         Обновляет фазу мерцания факелов.
@@ -159,18 +166,19 @@ class Dungeon:
         при очень долгой игре (как в bat.py / key.py / pickup.py).
         """
         self.time = (self.time + dt * 0.005) % (2 * math.pi * 1000)
+    # endregion
 
-    # ============================================================
-    #   КОЛЛИЗИИ
-    # ============================================================
+    # region КОЛЛИЗИИ
     def is_walkable_px(self, px, py):
         """
         Проходим ли пиксель (px, py)? Пол и лестница — да, стены — нет.
 
-        Набор тайлов расширен (FLOOR, GRASS) для совместимости с World:
-        game.py вызывает is_walkable_rect на current_map, который может
-        быть и World, и Dungeon. В самом подземелье FLOOR и GRASS
-        не встречаются (только DARK_FLOOR, STONE, STAIRS_UP).
+        FLOOR и GRASS в кортеже — задел на совместимость с World:
+        если когда-нибудь Dungeon начнёт импортировать тайлы из World
+        (или общий метод is_walkable_rect будет использован на смешанной
+        карте), эти тайлы не будут считаться стенами. Сейчас в Dungeon
+        они не встречаются (generate() создаёт только STONE, DARK_FLOOR,
+        STAIRS_UP) — то есть эти два значения формально мёртвые.
         """
         tx, ty = int(px // TILE), int(py // TILE)
         if tx < 0 or ty < 0 or tx >= self.w or ty >= self.h:
@@ -178,21 +186,26 @@ class Dungeon:
         return self.tiles[ty][tx] in (DARK_FLOOR, FLOOR, GRASS, STAIRS_UP)
 
     def is_walkable_rect(self, x, y, w, h):
-        """Проходим ли весь прямоугольник (проверяет все перекрытые тайлы)?"""
+        """
+        Проходим ли весь прямоугольник (проверяет все перекрытые тайлы)?
+
+        Для каждого перекрытого тайла проверяется его ЦЕНТР. Если хотя бы
+        один центр — не walkable (т.е. стена), весь прямоугольник
+        отбраковывается. Это эквивалентно проверке «любое перекрытие
+        с непроходимым тайлом», потому что центр непроходимого тайла
+        всегда внутри самого тайла и не может быть walkable.
+        """
         tx0, ty0 = int(x // TILE), int(y // TILE)
         tx1, ty1 = int((x + w - 1) // TILE), int((y + h - 1) // TILE)
         for ty in range(ty0, ty1 + 1):
             for tx in range(tx0, tx1 + 1):
-                # Проверяем центр каждого тайла — так проще и надёжнее,
-                # чем проверять 4 угла прямоугольника.
                 if not self.is_walkable_px(tx * TILE + TILE // 2,
                                            ty * TILE + TILE // 2):
                     return False
         return True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         self._draw_tiles(screen, cam)
         self._draw_torches(screen, cam)
@@ -260,15 +273,15 @@ class Dungeon:
         """
         Рисует все факелы: свечение, палочка, огонь (3 слоя).
 
-        Оптимизация: факелы далеко за экраном пропускаются
-        (проверка с запасом TILE * 2 — на случай, если огонь
-        чуть выглядывает за край).
+        Оптимизация: факелы далеко за экраном пропускаются.
+        Радиус запаса TILE*2 = 80 px — больше, чем радиус свечения
+        (GLOW_SIZE/2 = 40) и максимальное смещение огня при мерцании
+        (2 px), поэтому факел не «моргнёт» на краю экрана.
         """
         for torch_tx, torch_ty in self.torches:
             tx_screen = int(torch_tx * TILE - cam.x) + TILE // 2
             ty_screen = int(torch_ty * TILE - cam.y) + TILE // 2
 
-            # Оптимизация: не рисуем, если далеко за экраном
             if not (-TILE * 2 < tx_screen < WIDTH + TILE * 2 and
                     -TILE * 2 < ty_screen < HEIGHT + TILE * 2):
                 continue
@@ -295,3 +308,5 @@ class Dungeon:
             pygame.draw.circle(screen, self.FIRE_OUTER, (fire_x, fire_y), 6)
             pygame.draw.circle(screen, self.FIRE_MID,   (fire_x, fire_y), 4)
             pygame.draw.circle(screen, self.FIRE_INNER, (fire_x, fire_y), 2)
+    # endregion
+# endregion (Dungeon)

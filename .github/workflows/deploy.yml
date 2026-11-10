@@ -2,141 +2,115 @@
 #   deploy.yml — автодеплой игры на GitHub Pages
 #   Путь: .github/workflows/deploy.yml
 #   Собирает проект через Pygbag и публикует в интернете.
+#
+#   Поиск по файлу: Ctrl+F "region"
+#   PyCharm сворачивает блоки между # region и # endregion.
 # ============================================================
 
 name: Deploy Game to GitHub Pages
 
-# ============================================================
-#   ТРИГГЕРЫ
-#   workflow_dispatch — ручной запуск из вкладки Actions
-#                       (перезапуск без пустого коммита)
-#   push              — автосборка при пуше в main
-# ============================================================
+# region ТРИГГЕРЫ
+# workflow_dispatch — ручной запуск из вкладки Actions
+# push — автосборка при пуше в main
 on:
   workflow_dispatch: {}
   push:
     branches: [ main ]
+# endregion
 
-# ============================================================
-#   ПРАВА ДОСТУПА
-#   Минимально необходимые для деплоя на Pages.
-# ============================================================
+# region ПРАВА ДОСТУПА
 permissions:
   contents: read      # читаем код репозитория
   pages: write        # публикуем на GitHub Pages
   id-token: write     # OIDC-токен для безопасного деплоя
+# endregion
 
-# ============================================================
-#   КОНКУРЕНТНОСТЬ
-#   При новом пуше в main отменяем предыдущий деплой,
-#   чтобы не гонять два параллельных процесса.
-# ============================================================
+# region КОНКУРЕНТНОСТЬ
+# При новом пуше в main отменяем предыдущий деплой,
+# чтобы не гонять два параллельных процесса.
 concurrency:
   group: "pages"
   cancel-in-progress: true
+# endregion
 
-# ============================================================
-#   ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
-#   PYTHONUTF8=1 — иначе Python на Linux-раннере
-#   не прочитает русские буквы в исходниках.
-#   Значение в кавычках — чтобы YAML не превратил его в int.
-#   Объявлено глобально, а не внутри job — применяется ко всем
-#   шагам и не требует повторения при добавлении второго job.
-# ============================================================
+# region ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
+# PYTHONUTF8=1 — иначе Python на Linux-раннере
+# не прочитает русские буквы в исходниках.
+# Значение в кавычках — чтобы YAML не превратил его в int.
 env:
   PYTHONUTF8: "1"
+# endregion
 
-# ============================================================
-#   ЗАДАЧА
-# ============================================================
+# region JOB: build-and-deploy
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
-    # 15 минут с запасом: первая сборка без кэша ~5–7 мин,
-    # с кэшем ~2–3 мин. Если pygbag зависнет — задача упадёт,
+    # region Общие настройки job
+    # timeout 15 мин — если pygbag зависнет, задача упадёт,
     # а не будет висеть до лимита GitHub (6 часов).
     timeout-minutes: 15
 
     # Без блока `environment` деплой на Pages падает с ошибкой 404.
-    # Здесь же GitHub берёт финальный URL из шага `deployment`.
+    # GitHub берёт финальный URL из шага `deployment`.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # endregion
 
-    # ========================================================
-    #   ШАГИ СБОРКИ
-    # ========================================================
+    # region ШАГИ СБОРКИ
     steps:
 
-      # ------------------------------------------------------
-      # 1. Клонируем репозиторий в раннер.
-      #    fetch-depth: 1 — только последний коммит (быстрее).
-      #    persist-credentials: false — не оставляем GITHUB_TOKEN
-      #    в .git/config после клонирования (security best practice).
-      #    Если когда-нибудь появится шаг, который пушит обратно
-      #    (например, авто-коммит бейджа) — уберите этот параметр.
-      # ------------------------------------------------------
+      # region ШАГ 1: Checkout code
+      # fetch-depth: 1 — только последний коммит (быстрее).
+      # persist-credentials: false — не оставляем GITHUB_TOKEN
+      # в .git/config после клонирования (security best practice).
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           persist-credentials: false
+      # endregion
 
-      # ------------------------------------------------------
-      # 2. Ставим Python 3.12 + кэш pip.
-      #    cache-dependency-path — ключ кэша по requirements.txt.
-      #    Если файла нет — шаг НЕ упадёт, но в логах появится
-      #    Warning: "No file matched to [requirements.txt]".
-      #    Кэш в этом случае будет пустым (это нормально).
-      # ------------------------------------------------------
+      # region ШАГ 2: Set up Python
+      # cache-dependency-path — ключ кэша по requirements.txt.
+      # Если файла нет — шаг НЕ упадёт, но в логах будет Warning.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: requirements.txt
+      # endregion
 
-      # ------------------------------------------------------
-      # 3. Ставим зависимости.
-      #    pygbag требует pygame-ce (форк pygame с поддержкой WASM).
-      #    pygame-ce>=2.5 — минимальная версия с поддержкой Python 3.12.
-      #    Верхняя граница <3 защищает от breaking changes.
-      #    pygbag==0.9.3 — точная версия, чтобы сборка была
-      #    воспроизводимой (в 0.9.x бывают ломающие изменения).
-      # ------------------------------------------------------
+      # region ШАГ 3: Install dependencies
+      # Зависимости берутся из requirements.txt — единый источник
+      # правды. Раньше версии дублировались здесь и в requirements.txt,
+      # что приводило к рассинхрону при обновлении (например, если
+      # поднять pygbag до 0.9.4 — пришлось бы править в двух местах).
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "pygame-ce>=2.5,<3" pygbag==0.9.3
+          pip install -r requirements.txt
+      # endregion
 
-      # ------------------------------------------------------
-      # 4. Собираем игру в WebAssembly (WASM).
-      #    `.` — текущая директория как источник (корень проекта).
-      #    --build — создать build/web с готовой сборкой.
-      #    --ume_block 1 — показываем оверлей «Click to play»,
-      #    после клика клавиатура в браузере работает корректно.
-      #    --template custom.tmpl — ОБЯЗАТЕЛЬНО: наш шаблон
-      #    сохраняет пропорции 3:2 (960×640), без него canvas
-      #    растянется на всё окно и картинка исказится.
-      # ------------------------------------------------------
+      # region ШАГ 4: Build with Pygbag
+      # `.` — корень проекта как источник.
+      # --build — создать build/web.
+      # --ume_block 1 — оверлей «Click to play» (иначе WASD не работает
+      #   до клика по канвасу в некоторых браузерах).
+      # --template custom.tmpl — ОБЯЗАТЕЛЬНО: наш шаблон сохраняет
+      #   пропорции 3:2 (960×640). Без него картинка искажается.
       - name: Build with Pygbag
         run: python -m pygbag --build --ume_block 1 --template custom.tmpl .
+      # endregion
 
-      # ------------------------------------------------------
-      # 5. Проверяем, что сборка не пустая.
-      #    Шаг защищает от двух проблем:
-      #    а) build/web вообще не создан (pygbag упал молча)
-      #    б) build/web создан, но index.html в нём нет
-      #       (некорректный шаблон/ошибка в custom.tmpl)
-      #
-      #    ::error:: — аннотация в UI GitHub Actions, чтобы
-      #    ошибка была сразу видна и понятна, а не «exit code 1».
-      #
-      #    ВНИМАНИЕ: `ls ... || true` — если build/web не
-      #    существует, ls падает, и без `|| true` шаг завершается
-      #    ДО проверки if. Не убирайте `|| true` при редактировании.
-      # ------------------------------------------------------
+      # region ШАГ 5: Verify build output
+      # Защита от двух проблем:
+      #   а) build/web вообще не создан (pygbag упал молча)
+      #   б) build/web создан, но index.html нет (битый шаблон)
+      # ::error:: — аннотация в UI GitHub Actions.
+      # ВНИМАНИЕ: `ls ... || true` — без него шаг упадёт ДО проверки if.
       - name: Verify build output
         run: |
           ls -la build/web || true
@@ -144,48 +118,35 @@ jobs:
             echo "::error::Pygbag не создал build/web/index.html — проверьте вывод сборки выше"
             exit 1
           fi
+      # endregion
 
-      # ------------------------------------------------------
-      # 6. Готовим Pages (читаем конфиг репозитория).
-      #    Если Pages не включён в Settings → Pages
-      #    (Source: GitHub Actions) — упадёт здесь
-      #    с понятной ошибкой, а не на деплое.
-      # ------------------------------------------------------
+      # region ШАГ 6: Setup Pages
+      # Если Pages не включён в Settings → Pages (Source: GitHub Actions),
+      # упадёт здесь с понятной ошибкой, а не на деплое.
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      # endregion
 
-      # ------------------------------------------------------
-      # 7. Загружаем собранное в артефакт для деплоя.
-      #    Путь build/web — стандартный для pygbag --build.
-      #    retention-days: 1 — не храним артефакт 90 дней
-      #    (дефолт). После деплоя он уже не нужен, а квоту жрёт.
-      # ------------------------------------------------------
+      # region ШАГ 7: Upload artifact
+      # retention-days: 1 — не храним артефакт 90 дней (дефолт).
+      # После деплоя он уже не нужен, а квоту жрёт.
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: build/web
           retention-days: 1
+      # endregion
 
-      # ------------------------------------------------------
-      # 8. Публикуем на GitHub Pages.
-      #    id: deployment используется в двух местах:
-      #      - environment.url (см. выше) — финальный URL
-      #      - шаг 9 — запись URL в Summary workflow
-      # ------------------------------------------------------
+      # region ШАГ 8: Deploy to GitHub Pages
+      # id: deployment используется в environment.url и в шаге 9.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+      # endregion
 
-      # ------------------------------------------------------
-      # 9. Пишем URL живой игры в Summary workflow.
-      #    После успешного деплоя вверху страницы Actions
-      #    появится кликабельная ссылка — удобно проверять.
-      #
-      #    printf вместо echo: на разных bash echo по-разному
-      #    обрабатывает \n и -e, printf ведёт себя одинаково.
-      #    "$GITHUB_STEP_SUMMARY" в кавычках — безопасно,
-      #    даже если переменная окажется пустой.
-      # ------------------------------------------------------
+      # region ШАГ 9: Write deployment URL to summary
+      # printf вместо echo — одинаково работает на разных bash.
+      # "$GITHUB_STEP_SUMMARY" в кавычках — безопасно, даже если пусто.
       - name: Write deployment URL to summary
         run: |
           {
@@ -193,3 +154,8 @@ jobs:
             printf '\n'
             printf 'Ссылка: %s\n' "${{ steps.deployment.outputs.page_url }}"
           } >> "$GITHUB_STEP_SUMMARY"
+      # endregion
+
+    # endregion (ШАГИ СБОРКИ)
+
+# endregion (JOB)

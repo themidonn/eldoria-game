@@ -20,20 +20,25 @@ localStorage (приватный режим, старый браузер, кво
   - read()    — при загрузке сейва
   - write()   — при автосохранении и по F5
   - delete()  — при R (win/lose) и N (новая игра)
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import json
 import os
 import sys
 
+
+# region КОНСТАНТЫ
+# Версионированный ключ: если формат сохранения изменится —
+# поднять до _v2, старый _v1 останется нетронутым в localStorage.
 _SAVE_KEY = "eldoria_save_v1"
+# endregion
 
 
-# ============================================================
-#   ОПРЕДЕЛЕНИЕ СРЕДЫ
-#   sys.platform == "emscripten" → True в браузере (Pygbag),
-#   False на десктопе. Это самый надёжный способ.
-# ============================================================
+# region ОПРЕДЕЛЕНИЕ СРЕДЫ
+# sys.platform == "emscripten" → True в браузере (Pygbag),
+# False на десктопе. Это самый надёжный способ.
 _IS_WEB = (sys.platform == "emscripten")
 
 # Для браузера: пробуем достать platform.window (localStorage).
@@ -45,31 +50,48 @@ _platform = None
 if _IS_WEB:
     try:
         import platform as _platform  # специальный модуль Pygbag
-        _HAS_STORAGE = hasattr(_platform, "window")
-    except ImportError:
+        # getattr(..., None) is not None — строже, чем hasattr:
+        # если window существует, но равен None (битое состояние
+        # Pygbag), hasattr вернул бы True, а мы — False.
+        # Дополнительно проверяем localStorage: в редких сборках
+        # window есть, а localStorage нет.
+        _HAS_STORAGE = (
+            getattr(_platform, "window", None) is not None
+            and hasattr(_platform.window, "localStorage")
+        )
+    except ImportError as e:
+        # На практике не срабатывает: platform — стандартный модуль.
+        # Но Pygbag исторически нестабилен, оставляем защиту и
+        # печатаем ошибку, чтобы отладка была возможной.
+        print(f"[save] platform import error: {e}")
         _HAS_STORAGE = False
+# endregion
 
 
-# ============================================================
-#   ПУТЬ ДЛЯ ДЕСКТОПА
-# ============================================================
-def _desktop_path():
-    """Возвращает путь к файлу сохранения на десктопе.
-
-    Создаёт папку ~/.eldoria, если её нет. Используется только
-    на десктопе: в браузере os.makedirs упал бы с BrowserFS not found.
+# region ПУТЬ ДЛЯ ДЕСКТОПА
+def _desktop_dir():
     """
-    home = os.path.expanduser("~")
-    folder = os.path.join(home, ".eldoria")
-    os.makedirs(folder, exist_ok=True)
-    return os.path.join(folder, "save.json")
+    Возвращает путь к папке ~/.eldoria — БЕЗ создания.
+
+    Создание папки — только в write(): exists()/read()/delete()
+    не должны иметь побочных эффектов на файловую систему.
+    """
+    return os.path.join(os.path.expanduser("~"), ".eldoria")
 
 
-# ============================================================
-#   ПУБЛИЧНЫЕ ФУНКЦИИ
-# ============================================================
+def _desktop_path():
+    """Возвращает путь к файлу сохранения — БЕЗ создания папки."""
+    return os.path.join(_desktop_dir(), "save.json")
+# endregion
+
+
+# region ПУБЛИЧНЫЕ ФУНКЦИИ
 def exists():
-    """Есть ли сохранение? Возвращает bool."""
+    """
+    Есть ли сохранение? Возвращает bool.
+
+    Без побочных эффектов: не создаёт ~/.eldoria/, если её нет.
+    """
     try:
         if _IS_WEB:
             if not _HAS_STORAGE:
@@ -96,6 +118,10 @@ def write(data):
                 return False
             _platform.window.localStorage.setItem(_SAVE_KEY, text)
         else:
+            # makedirs — только здесь: это единственное место,
+            # где папка реально нужна. exist_ok=True — если папка
+            # уже есть, ничего не делаем (частый случай).
+            os.makedirs(_desktop_dir(), exist_ok=True)
             with open(_desktop_path(), "w", encoding="utf-8") as f:
                 f.write(text)
         return True
@@ -146,3 +172,4 @@ def delete():
                 os.remove(path)
     except Exception as e:
         print(f"[save] delete error: {e}")
+# endregion

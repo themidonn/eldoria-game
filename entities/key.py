@@ -14,6 +14,8 @@ KEY_ZONE_X_MIN..MAX, KEY_ZONE_Y_MIN..MAX).
 ВАЖНО: конструктор создаёт pygame.Surface для свечения —
 перед созданием Key должен быть вызван pygame.display.init().
 В main.py это гарантировано: init до импорта Game.
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import math
@@ -22,9 +24,7 @@ import pygame
 
 class Key:
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y):
         # float() — для консистентности с bat.py / boss.py / enemy.py.
         self.x = float(x)
@@ -40,17 +40,15 @@ class Key:
         # альфа задаётся через цвет, а не через Surface.set_alpha().
         self.glow = pygame.Surface((60, 60), pygame.SRCALPHA)
         pygame.draw.circle(self.glow, (255, 215, 0, 80), (30, 30), 30)
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
     def update(self, dt):
         # Собранный ключ не анимируется — экономим вычисления.
         if self.collected:
@@ -59,10 +57,9 @@ class Key:
         # bob крутится в цикле, чтобы float не терял точность
         # при очень долгой игре (как в bat.py).
         self.bob = (self.bob + dt * 0.005) % (2 * math.pi * 1000)
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.collected:
             return
@@ -90,3 +87,4 @@ class Key:
                          (sx + 15, sy + 15), (sx + 18, sy + 12), 2)
         pygame.draw.line(screen, GOLD,
                          (sx + 18, sy + 18), (sx + 20, sy + 16), 2)
+    # endregion

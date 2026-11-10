@@ -18,6 +18,8 @@ ui/dialog.py — Диалоговое окно.
 ВАЖНО: конструктор вызывает pygame.font.Font() —
 перед созданием Dialog должен быть вызван pygame.font.init().
 В main.py это гарантировано: init до импорта Game.
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -26,19 +28,16 @@ from settings import *
 
 class Dialog:
 
-    # ============================================================
-    #   ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
-    # ============================================================
+    # region ПАЛИТРА (атрибуты класса — не пересоздаются каждый кадр)
     BORDER_COLOR    = (200, 180, 120)   # рамка бокса
     SPEAKER_COLOR   = (240, 210, 130)   # имя спикера
     HINT_COLOR      = (150, 150, 150)   # [Space] далее
     HINT_YES_COLOR  = (100, 255, 100)   # [Y] Да
     HINT_NO_COLOR   = (255, 100, 100)   # [N] Нет
     BOX_FILL        = (20, 20, 30, 230) # фон бокса (alpha в цвете)
+    # endregion
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self):
         # --- Состояние ---
         self.active = False
@@ -85,10 +84,11 @@ class Dialog:
 
         # Имя спикера (рендерится в show(), храним здесь для порядка)
         self.speaker_surface = None
+    # endregion
 
-    # ============================================================
-    #   ПУБЛИЧНЫЕ МЕТОДЫ
-    # ============================================================
+    # region ПУБЛИЧНЫЕ МЕТОДЫ
+
+    # region show
     def show(self, speaker, text, is_choice=False):
         """
         Открывает диалог. Если text пуст — покажет пустую страницу.
@@ -108,7 +108,9 @@ class Dialog:
         self.page = 0
         self.active = True
         self.is_choice = is_choice
+    # endregion
 
+    # region next_page
     def next_page(self):
         """
         Переход к следующей странице.
@@ -123,10 +125,13 @@ class Dialog:
         self.page += 1
         if self.page >= len(self.pages):
             self.active = False
+    # endregion
 
-    # ============================================================
-    #   ВНУТРЕННИЕ МЕТОДЫ
-    # ============================================================
+    # endregion (ПУБЛИЧНЫЕ МЕТОДЫ)
+
+    # region ВНУТРЕННИЕ МЕТОДЫ
+
+    # region _wrap
     def _wrap(self, text):
         """
         Разбивает текст на строки по ширине бокса,
@@ -174,10 +179,11 @@ class Dialog:
             rendered_pages.append(page_surf)
 
         return rendered_pages
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # endregion (ВНУТРЕННИЕ МЕТОДЫ)
+
+    # region ОТРИСОВКА
     def draw(self, screen):
         if not self.active or not self.pages:
             return
@@ -216,3 +222,4 @@ class Dialog:
             screen.blit(self.hint_space,
                         (self.box_rect.right - self.hint_space.get_width() - 20,
                          hint_y))
+    # endregion

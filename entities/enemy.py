@@ -9,6 +9,8 @@ entities/enemy.py — Враги: слизни (обычные и элитные
   - _spawn_crystal_and_guards() — элитные стражи (hp=2 или 3)
   - _update_level_1() — update + take_damage
   - _draw_level_1() — draw
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import pygame
@@ -17,9 +19,7 @@ from settings import *
 
 class Slime:
 
-    # ============================================================
-    #   КОНСТРУКТОР
-    # ============================================================
+    # region КОНСТРУКТОР
     def __init__(self, x, y, hp=2):
         # --- Позиция и размеры ---
         self.x, self.y = float(x), float(y)
@@ -35,17 +35,15 @@ class Slime:
         # --- Состояние ---
         self.hit_flash = 0                     # мс — красная вспышка при ударе
         self.dead = False
+    # endregion
 
-    # ============================================================
-    #   СВОЙСТВА
-    # ============================================================
+    # region СВОЙСТВА
     @property
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА
-    # ============================================================
+    # region ЛОГИКА
     def update(self, player, world, dt):
         if self.dead:
             return
@@ -125,10 +123,9 @@ class Slime:
 
         if self.hp <= 0:
             self.dead = True
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self, screen, cam):
         if self.dead:
             return
@@ -160,3 +157,4 @@ class Slime:
         pygame.draw.circle(screen, (255, 255, 255), (sx + self.w - 8, sy + 12), 3)
         pygame.draw.circle(screen, (0, 0, 0),      (sx + 8, sy + 12), 1)
         pygame.draw.circle(screen, (0, 0, 0),      (sx + self.w - 8, sy + 12), 1)
+    # endregion

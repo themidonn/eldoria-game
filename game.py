@@ -13,6 +13,8 @@ await asyncio.sleep(0) внутри while (см. ниже).
 Используется в main.py:
   - from game import Game (после pygame.display.init())
   - await Game().run() (внутри async def main())
+
+Поиск по файлу: Ctrl+F "region"
 """
 
 import asyncio
@@ -45,19 +47,18 @@ from ui.floating_text import FloatingText
 from ui.minimap import MiniMap
 from ui.particles import ParticleManager
 
-# ============================================================
-#   СТРАНИЦЫ ВСТУПЛЕНИЯ
-#   INTRO разбивается по точкам на отдельные предложения.
-#   Каждое — одна страница на весь экран.
-# ============================================================
+
+# region СТРАНИЦЫ ВСТУПЛЕНИЯ
+# INTRO разбивается по точкам на отдельные предложения.
+# Каждое — одна страница на весь экран.
 INTRO_PAGES = [s.strip() + "." for s in INTRO.split(".") if s.strip()]
+# endregion
 
 
+# region КЛАСС: Game
 class Game:
 
-    # ============================================================
-    #   КОНСТАНТЫ
-    # ============================================================
+    # region КОНСТАНТЫ
     TOTAL_CRYSTALS = 3
 
     # Смещение подсказки «E — войти» над игроком.
@@ -69,10 +70,9 @@ class Game:
     # входит в замок — чтобы не мешал в бою с боссом.
     CASTLE_X_MIN, CASTLE_X_MAX = 2, 13
     CASTLE_Y_MIN, CASTLE_Y_MAX = 2, 10
+    # endregion
 
-    # ============================================================
-    #   ИНИЦИАЛИЗАЦИЯ
-    # ============================================================
+    # region ИНИЦИАЛИЗАЦИЯ
     def __init__(self):
         # Окно уже создано в main.py (требование Pygbag)
         self.screen = pygame.display.get_surface()
@@ -193,7 +193,6 @@ class Game:
         self.intro_pages = [self._wrap_intro_page(p) for p in INTRO_PAGES]
 
         # --- Текст титульного экрана (кэш) ---
-        # Раньше рендерился каждый кадр (7–8 render()). Теперь — только blit.
         self.title_big = self.font_title_big.render(
             "Хроники Эльдории", True, (240, 210, 130)
         )
@@ -232,6 +231,7 @@ class Game:
         self.intro_hint_last = self.font_hint_banner.render(
             "[Space] начать игру    [Esc] пропустить", True, (150, 150, 170)
         )
+
         # --- Оверлей болота (кэш) ---
         # Зелёный круг вокруг игрока, когда он в болоте.
         # SRCALPHA + alpha в цвете — Pygbag-safe (не используем set_alpha).
@@ -283,10 +283,9 @@ class Game:
                          1, border_radius=4)
         surf.blit(text_surf, (10, 5))
         return surf
+    # endregion
 
-    # ============================================================
-    #   СБРОС И СПАВН
-    # ============================================================
+    # region СБРОС И СПАВН
     def _reset(self):
         """Сбрасывает всё состояние игры к началу новой партии."""
         # --- Карты ---
@@ -340,6 +339,8 @@ class Game:
         self.npcs.append(NPC(55 * TILE, 48 * TILE, "Житель"))
 
         # --- Кристаллы + их охрана ---
+        # Замечание: некоторые offset'ы выходят за CLEAR_ZONES в map.py —
+        # страж может не заспавниться, если там дерево (см. review).
         self._spawn_crystal_and_guards(
             85, 30, "Кристалл Леса",
             [(-3, 2), (0, 2), (3, 2)], hp=2
@@ -357,7 +358,6 @@ class Game:
         self.boss = Boss(7 * TILE, 5 * TILE)
 
         # --- Случайные слизни по карте (детерминированно) ---
-        # Seed=99 фиксирует расположение — карта предсказуема.
         rng = random.Random(99)
         for _ in range(30):
             tx = rng.randint(5, self.world.w - 5)
@@ -404,16 +404,21 @@ class Game:
         )
 
     def _spawn_crystal_and_guards(self, cx, cy, name, offsets, hp):
-        """Создаёт кристалл и слизней-охранников в заданных смещениях."""
+        """
+        Создаёт кристалл и слизней-охранников в заданных смещениях.
+
+        Если тайл охранника не GRASS (дерево/стена), страж не спавнится.
+        Это может привести к «неполной охране», если offset выходит
+        за CLEAR_ZONES в map.py.
+        """
         self.crystals.append(Crystal(cx * TILE, cy * TILE, name))
         for dx, dy in offsets:
             tx, ty = cx + dx, cy + dy
             if self.world.tiles[ty][tx] == GRASS:
                 self.enemies.append(Slime(tx * TILE, ty * TILE, hp=hp))
+    # endregion
 
-    # ============================================================
-    #   ПЕРЕКЛЮЧЕНИЕ УРОВНЕЙ
-    # ============================================================
+    # region ПЕРЕКЛЮЧЕНИЕ УРОВНЕЙ
     @property
     def world(self):
         """Текущая карта (main_world или dungeon)."""
@@ -491,10 +496,9 @@ class Game:
         self.floating_texts = []
         self.dungeon_projectiles = []
         self.save_progress()
+    # endregion
 
-    # ============================================================
-    #   СОХРАНЕНИЕ / ЗАГРУЗКА
-    # ============================================================
+    # region СОХРАНЕНИЕ / ЗАГРУЗКА
     def save_progress(self):
         """
         Сохраняет текущее состояние.
@@ -529,6 +533,10 @@ class Game:
                 'has_key': self.has_key,
                 'quest_completed': self.quest_completed,
                 'lore_reward_given': self.lore_reward_given,
+                # win_delay: если сохранились в 1500-мс окне между смертью
+                # босса и переходом в state='win', при загрузке эффект
+                # смерти не повторится (иначе частицы спавнились бы заново).
+                'win_delay': self.win_delay,
             },
             'world': {
                 'gate_open': self.main_world.gate_open,
@@ -551,6 +559,13 @@ class Game:
                 'read_lore': [i for i, s in enumerate(self.dungeon_lore_stones) if s.is_read],
             },
             'boss': {
+                # Позиция сохраняется: иначе при загрузке посреди боя
+                # босс «телепортировался» бы на арену у (7, 5).
+                # Защита от «босс на игроке» — в load_progress, после
+                # того как позиция игрока уже установлена (порядок важен:
+                # в load_progress секция босса идёт ДО позиции игрока).
+                'x': self.boss.x if self.boss else 0.0,
+                'y': self.boss.y if self.boss else 0.0,
                 'dead': self.boss.dead if self.boss else True,
                 'hp': self.boss.hp if self.boss else 0,
                 'phase': self.boss.phase if self.boss else 'idle',
@@ -588,6 +603,17 @@ class Game:
         self.has_key = bool(pr.get('has_key', False))
         self.quest_completed = bool(pr.get('quest_completed', False))
         self.lore_reward_given = bool(pr.get('lore_reward_given', False))
+        self.win_delay = float(pr.get('win_delay', 0))
+
+        # Защита: win_delay > 0 имеет смысл только если босс уже мёртв.
+        # ВАЖНО: проверяем dead из save-данных напрямую, а не
+        # self.boss.dead — секция босса загружается НИЖЕ, и на этом
+        # этапе self.boss.dead ещё дефолтный (True из Boss.__init__),
+        # из-за чего проверка «not self.boss.dead» никогда не сработала
+        # бы. См. историю правок.
+        _boss_dead_in_save = bool(data.get('boss', {}).get('dead', True))
+        if self.win_delay > 0 and not _boss_dead_in_save:
+            self.win_delay = 0
 
         # --- Мир ---
         w = data.get('world', {})
@@ -619,12 +645,16 @@ class Game:
         # --- Босс ---
         b = data.get('boss', {})
         if self.boss:
+            # Позиция — восстанавливаем ДО проверки «босс на игроке»
+            # (она будет в самом конце функции, после позиции игрока).
+            self.boss.x = float(b.get('x', self.boss.x))
+            self.boss.y = float(b.get('y', self.boss.y))
             self.boss.dead = bool(b.get('dead', True))
             self.boss.hp = int(b.get('hp', self.boss.max_hp))
             self.boss.phase = b.get('phase', 'idle')
             self.boss.charge_timer = float(b.get('charge_timer', 3.0))
             self.boss.windup_timer = float(b.get('windup_timer', 0.0))
-            # Защита: если сохранились в момент charge/windup — при загрузке
+            # Если сохранились в момент charge/windup — при загрузке
             # босс «спокойно стоит», у игрока есть 1 сек на реакцию.
             if self.boss.phase in ('charge', 'windup'):
                 self.boss.phase = 'idle'
@@ -665,9 +695,41 @@ class Game:
             self.player.x = float(p.get('x', 50 * TILE + 7))
             self.player.y = float(p.get('y', 65 * TILE + 7))
 
-    # ============================================================
-    #   СОБЫТИЯ
-    # ============================================================
+        # --- Защита от «босс на игроке» ---
+        # Если сохранённая позиция босса оказалась вплотную к игроку
+        # (например, сохранились в момент, когда босс настиг игрока
+        # вплотную), после загрузки игрок мгновенно получил бы удар
+        # без шанса среагировать. Отодвигаем босса на безопасное
+        # расстояние. Проверка ПОСЛЕ установки позиции игрока —
+        # иначе сравнение было бы некорректным.
+        if (self.level == 1
+                and self.boss
+                and not self.boss.dead
+                and self.boss_spawned):
+            dx = self.boss.x - self.player.x
+            dy = self.boss.y - self.player.y
+            dist = (dx * dx + dy * dy) ** 0.5
+            safe_dist = 150.0   # ~3.75 тайла — босс не достанет одним ударом
+            if dist < safe_dist:
+                if dist < 0.01:
+                    # Босс и игрок в одной точке — отодвигаем вправо
+                    dx, dy, dist = 1.0, 0.0, 1.0
+                nx = self.player.x + dx / dist * safe_dist
+                ny = self.player.y + dy / dist * safe_dist
+                if self.world.is_walkable_rect(
+                        nx, ny, self.boss.w, self.boss.h):
+                    self.boss.x, self.boss.y = nx, ny
+                else:
+                    # Новая позиция не проходима — возвращаем на арену
+                    self.boss.x = 7 * TILE
+                    self.boss.y = 5 * TILE
+                # Сбрасываем рывок, чтобы не «достал» игрока сразу после
+                # отодвигания.
+                self.boss.phase = 'idle'
+                self.boss.charge_timer = 1.0
+    # endregion
+
+    # region СОБЫТИЯ
     def handle_events(self):
         """Обрабатывает события Pygame (QUIT, KEYDOWN)."""
         for e in pygame.event.get():
@@ -757,6 +819,8 @@ class Game:
         """Обрабатывает ввод во время открытого диалога."""
         if self.dialog.is_choice:
             # --- Выбор [Y] / [N] ---
+            # Esc во время выбора не обрабатывается осознанно —
+            # игрок обязан выбрать Y или N.
             if key == pygame.K_y:
                 self.dialog.active = False
                 self.villager_met = True
@@ -773,10 +837,9 @@ class Game:
                 self.dialog.next_page()
             elif key == pygame.K_ESCAPE:
                 self.dialog.active = False
+    # endregion
 
-    # ============================================================
-    #   ВЗАИМОДЕЙСТВИЕ (E)
-    # ============================================================
+    # region ВЗАИМОДЕЙСТВИЕ (E)
     def _interact(self):
         """Диспетчер взаимодействий по клавише E."""
         if self._try_use_stairs():
@@ -906,10 +969,9 @@ class Game:
             else:
                 self.dialog.show(npc.name, ELDER_INTRO)
             return
+    # endregion
 
-    # ============================================================
-    #   ЛОГИКА (UPDATE)
-    # ============================================================
+    # region ЛОГИКА (UPDATE)
     def update(self, dt):
         """Обновляет состояние, если игра не на паузе и не в диалоге."""
         if self.state != 'playing' or self.dialog.active:
@@ -1194,10 +1256,9 @@ class Game:
             self.world.w, self.world.h,
             dt  # ← передаём dt: тряска затухает frame-independent
         )
+    # endregion
 
-    # ============================================================
-    #   ОТРИСОВКА
-    # ============================================================
+    # region ОТРИСОВКА
     def draw(self):
         """Главный метод отрисовки: диспетчеризация по состоянию."""
         self.screen.fill(COLOR_SKY)
@@ -1258,7 +1319,8 @@ class Game:
                 e.draw(self.screen, self.camera)
 
     def _draw_swamp_effect(self):
-        """Зелёный ореол вокруг игрока, если он стоит на тайле болота.
+        """
+        Зелёный ореол вокруг игрока, если он стоит на тайле болота.
 
         Проверяем тайл под ЦЕНТРОМ игрока — та же логика, что
         в player.py (замедление скорости). Это гарантирует,
@@ -1400,10 +1462,9 @@ class Game:
             self._overlay_lose()
         if self.state == 'paused':
             self._overlay_pause()
+    # endregion
 
-    # ============================================================
-    #   ЭКРАНЫ
-    # ============================================================
+    # region ЭКРАНЫ (title / intro / win / lose / paused)
     def _draw_intro(self):
         """Экран вступления: фон, заголовок, страница, индикатор, подсказки."""
         # --- Фон ---
@@ -1531,10 +1592,9 @@ class Game:
             self.pause_text_2,
             (WIDTH // 2 - self.pause_text_2.get_width() // 2, 360)
         )
+    # endregion
 
-    # ============================================================
-    #   ГЛАВНЫЙ ЦИКЛ
-    # ============================================================
+    # region ГЛАВНЫЙ ЦИКЛ
     async def run(self):
         """
         Главный цикл. Async, потому что Pygbag требует
@@ -1547,3 +1607,5 @@ class Game:
             self.draw()
             await asyncio.sleep(0)
         pygame.quit()
+    # endregion
+# endregion (Game)

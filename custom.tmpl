@@ -1,5 +1,15 @@
 <html lang="en-us"><script src="{{cookiecutter.cdn}}pythons.js" type=module id="site" data-python="python{{cookiecutter.PYBUILD}}" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer>#<!--
 
+# =============================================================================
+#   PYTHON SHEBANG (стандартный Pygbag 0.9.3)
+#   Запускается в WASM до HTML-части. Распаковывает .tar.gz / .apk,
+#   монтирует файловую систему, ждёт user gesture (UME), запускает
+#   main.py через shell.source().
+#
+#   НЕ МЕНЯТЬ: этот блок — стандартный загрузчик Pygbag. Все
+#   {{cookiecutter.*}} подставляются автоматически при сборке.
+# =============================================================================
+
 print("""
 Loading {{cookiecutter.title}} from {{cookiecutter.archive}}.apk
     Pygbag Version : {{cookiecutter.version}}
@@ -131,10 +141,11 @@ asyncio.run( custom_site() )
 --><script type="application/javascript">
 // END BLOCK
 
-
-
-// this dict is available under PyConfig.config from __main__
-
+// =============================================================================
+//   КОНФИГ PYGBAG
+//   Доступен в Python-коде как PyConfig.config.
+//   НЕ МЕНЯТЬ: стандартные имена ключей, Pygbag их читает.
+// =============================================================================
 config = {
     xtermjs : "{{cookiecutter.xtermjs}}" ,
     _sdl2 : "canvas",
@@ -153,6 +164,9 @@ config = {
     fb_height : "{{cookiecutter.height}}"
 }
 
+// =============================================================================
+//   ИНФОБОКС (центрирование всплывающего окна)
+// =============================================================================
 function show_infobox() {
     infobox.style.display = "block";
 
@@ -172,16 +186,21 @@ function show_infobox() {
 
     <title>{{cookiecutter.title}}</title>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="viewport" content="height=device-height, initial-scale=1.0">
+
+    <!-- БАГ-ФИКС: два разных viewport-тега перезаписывали друг друга.
+         Объединили в один — сохраняет и width, и height. -->
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
+
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes"/>
-
 
     <link rel="icon" type="image/png" href="favicon.png" sizes="16x16">
 
     <style>
+
+        /* ========================================================
+           ПРОГРЕСС ЗАГРУЗКИ
+           ======================================================== */
         #status {
             display: inline-block;
             vertical-align: top;
@@ -196,22 +215,35 @@ function show_infobox() {
             width: 300px;
         }
 
+        /* ========================================================
+           ИНФОБОКС (всплывающее сообщение поверх canvas)
+           ======================================================== */
         #infobox {
             position: fixed; /* center relative to viewport */
             background: green;
             color: blue;
             font-weight: bold;
             padding: 12px 24px;
- /*           display: none; */
             z-index: 999999;
         }
+
         div.emscripten { text-align: center; }
         div.emscripten_border { border: 1px solid black; }
         div.thick_border { border: 4px solid black; }
 
-        /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
-        /* average size of droid screen 470dp x 320dp  */
-                #canvas.emscripten {
+        /* ========================================================
+           CANVAS — 3:2, scale-to-fit, центрирование.
+           Это ГЛАВНАЯ кастомизация шаблона.
+
+           !important нужен, потому что Pygbag ставит inline-стили
+           (top:0, left:0, width, height) при каждой инициализации
+           и resize. CSS-!important перебивает inline только если
+           стоит в author stylesheet, но НЕ перебивает inline с
+           !important. Поэтому параллельно работает JS-setInterval
+           в custom_onload — он переписывает inline через
+           setProperty(..., "important").
+           ======================================================== */
+        #canvas.emscripten {
             border: 0px none;
             background-color: transparent;
 
@@ -236,7 +268,10 @@ function show_infobox() {
             transform: translate(-50%, -50%) !important;
         }
 
-                body {
+        /* ========================================================
+           BODY / СЛУЖЕБНЫЕ КЛАССЫ
+           ======================================================== */
+        body {
             font-family: arial;
             margin: 0;
             padding: 0;
@@ -293,25 +328,30 @@ function show_infobox() {
 
 <body>
 
+    <!-- ========================================================
+         ПРОГРЕСС-БАР ЗАГРУЗКИ
+         ======================================================== -->
     <div id="transfer" align=center>
-<!--        <div class="spinner" id='spinner'></div> -->
         <div class="emscripten" id="status">Downloading...</div>
         <div class="emscripten">
             <progress value="0" max="100" id="progress"></progress>
         </div>
     </div>
 
-
-
+    <!-- ========================================================
+         CANVAS'Ы
+         БАГ-ФИКС: width/height — числовые HTML-атрибуты (без "px").
+         "1px" браузер парсит как ошибку → 300×150 по умолчанию.
+         ======================================================== -->
     <canvas class="emscripten" id="canvas"
-width="1px"
-height="1px"
+width="1"
+height="1"
     oncontextmenu="event.preventDefault()" tabindex=1>
     </canvas>
 
     <canvas class="emscripten" id="canvas3d"
-width="{{cookiecutter.width}}px"
-height="{{cookiecutter.height}}px"
+width="{{cookiecutter.width}}"
+height="{{cookiecutter.height}}"
     oncontextmenu="event.preventDefault()" tabindex=1 hidden>
     </canvas>
 
@@ -319,7 +359,10 @@ height="{{cookiecutter.height}}px"
 
     <div id=html></div>
 
-    <div id=crt  class=bottomright >
+    <!-- ========================================================
+         ОТЛАДОЧНАЯ ПАНЕЛЬ (скрыта в проде, включается через debug())
+         ======================================================== -->
+    <div id=crt class=bottomright>
 
         <div id="system" hidden>
             <div class="button-container">
@@ -341,6 +384,8 @@ height="{{cookiecutter.height}}px"
 
         </div>
 
+        <!-- БАГ-ФИКС: было два атрибута style — браузер берёт только
+             первый, background:#FFFFFF терялся. Объединили в один. -->
         <div id=box class="emscripten_border" hidden=true>
 
             <div id="info" class="trinfo"></div>
@@ -348,8 +393,7 @@ height="{{cookiecutter.height}}px"
             <iframe id="iframe" class="framed" name="iframe"
 width="470px" height="90%"
 allowtransparency="true"
-style="z-index: 10;"
-style="background: #FFFFFF;"
+style="z-index: 10; background: #FFFFFF;"
 frameborder="1"
                 allowfullscreen="true"
                 webkitallowfullscreen="true"
@@ -376,6 +420,12 @@ frameborder="1"
 
     <script type="application/javascript">
 
+    // =========================================================================
+    //   ХУКИ PYGBAG
+    //   custom_onload / custom_prerun / custom_postrun — вызываются
+    //   загрузчиком в фиксированные моменты. Имена менять нельзя.
+    // =========================================================================
+
     globalThis.__canvas_resized = (self, ecw, ech) => {
         console.warn("TODO: panda3d canvas monitor", self, ecw, ech)
     }
@@ -395,9 +445,11 @@ frameborder="1"
 
         // Принудительное центрирование canvas.
         // Pygbag ставит inline-стили top:0/left:0 при window_resize(),
-        // и CSS !important в <style> их не перебивает.
-        // Единственный надёжный способ — переписывать inline-стили
-        // через setProperty(..., "important") каждые 200 мс.
+        // и CSS !important в <style> их не перебивает (inline с !important
+        // сильнее CSS с !important). Единственный надёжный способ —
+        // переписывать inline-стили через setProperty(..., "important")
+        // каждые 200 мс. Это «грязно», но Pygbag не даёт других хуков
+        // после window_resize().
                 setInterval(() => {
             const c = document.getElementById("canvas");
             if (c && c.style) {
@@ -407,7 +459,10 @@ frameborder="1"
                 c.style.setProperty("bottom", "auto", "important");
                 c.style.setProperty("right", "auto", "important");
                 c.style.setProperty("transform", "translate(-50%, -50%)", "important");
-                // ↓ ДОБАВИТЬ: размер
+                // Размер: тот же min()/calc(), что и в CSS — но через
+                // JS, потому что Pygbag перезапишет inline width/height
+                // при resize. {{cookiecutter.width}}/{{cookiecutter.height}}
+                // подставляются Jinja2 при сборке (числа без единиц).
                 c.style.setProperty("width", "min(100vw, calc(100vh * {{cookiecutter.width}} / {{cookiecutter.height}}))", "important");
                 c.style.setProperty("height", "min(100vh, calc(100vw * {{cookiecutter.height}} / {{cookiecutter.width}}))", "important");
             }
@@ -417,13 +472,11 @@ frameborder="1"
     function custom_prerun(){
         // no python main and no (MEMFS + VFS) yet.
         console.log(__FILE__, "custom_prerun")
-
     }
 
     function custom_postrun(){
         // python main and no VFS filesystem yet.
         console.log(__FILE__, "custom_postrun")
-
     }
 
     function debug() {
@@ -434,6 +487,10 @@ frameborder="1"
         Module.PyRun_SimpleString("shell.uptime()")
         window_resize()
     }
+
+    // =========================================================================
+    //   УТИЛИТЫ ДЛЯ ОТЛАДОЧНОЙ ПАНЕЛИ
+    // =========================================================================
 
     function info_inline(data){
         document.getElementById("info").innerHTML = data

@@ -1,35 +1,55 @@
 # ============================================================
 #   settings.py — все константы игры.
+#
+#   Единый источник правды: цвета, размеры, тайминги.
+#   Никаких импортов из других модулей проекта — только стандартный Python.
+#
+#   Поиск по файлу: Ctrl+F "region"
 # ============================================================
 
 # region РАЗМЕРЫ И ТАЙМИНГИ
+# Соотношение 3:2 (960×640) — совпадает с custom.tmpl (Pygbag).
 WIDTH, HEIGHT = 960, 640
 FPS = 60
 TILE = 40
 # endregion
 
 # region ИГРОК
-PLAYER_SPEED         = 4
-PLAYER_SIZE          = 26
-PLAYER_MAX_HP        = 6
-PLAYER_ATTACK_COOLDOWN = 350
-PLAYER_ATTACK_DURATION = 150
-PLAYER_ATTACK_RANGE    = 36
-PLAYER_ATTACK_DAMAGE   = 1
-PLAYER_INVULN_TIME     = 800
+PLAYER_SPEED         = 4      # px/кадр при 60 FPS (frame-independent в player.py)
+PLAYER_SIZE          = 26     # меньше TILE = 40 — зазор для навигации
+PLAYER_MAX_HP        = 6      # +1 от 5 камней лора → эффективный максимум 7
+PLAYER_ATTACK_COOLDOWN = 350  # мс — должен быть > ATTACK_DURATION
+PLAYER_ATTACK_DURATION = 150  # мс — длительность хитбокса удара
+PLAYER_ATTACK_RANGE    = 36   # px — сторона квадрата зоны удара
+PLAYER_ATTACK_DAMAGE   = 1    # после upgrade_weapon() → 2 (см. player.py)
+PLAYER_INVULN_TIME     = 800  # мс — неуязвимость после урона
 # endregion
 
 # region ТАЙЛЫ
+# ВАЖНО: присвоены ПО ПОЗИЦИИ (range(12)). Если когда-нибудь
+# понадобится добавить/удалить тайл — добавляй ТОЛЬКО В КОНЕЦ
+# (или присваивай числа явно), чтобы не сломать существующие карты.
+#
+# FLOOR (ID=4) сейчас НЕ ГЕНЕРИРУЕТСЯ ни World, ни Dungeon.
+# Он есть в проверках проходимости (World/Dungeon.is_walkable_px)
+# как задел на будущее, но в _draw_tile ветки для него нет.
+# Если начнёшь генерировать FLOOR — добавь его и в отрисовку,
+# иначе тайл будет проходим, но невидим.
 GRASS, TREE, WATER, STONE, FLOOR, DARK_FLOOR, GATE, HOUSE, STAIRS_UP, STAIRS_DOWN, MOUNTAIN, SWAMP = range(12)
 # endregion
 
 # region ЗОНА СПАВНА КЛЮЧА
+# Лес на северо-востоке карты (кристалл Леса — в (85, 30)).
+# Ключ спавнится в случайной точке этой зоны, где тайл == GRASS
+# (см. game.py, _spawn → rng_key). Кристалл Леса и зелье (84, 32)
+# тоже попадают в эту зону — ключ может оказаться на одном тайле
+# с ними (не краш, но выглядит странно). Крайне редкий edge case.
 KEY_ZONE_X_MIN, KEY_ZONE_X_MAX = 75, 95
 KEY_ZONE_Y_MIN, KEY_ZONE_Y_MAX = 20, 45
 # endregion
 
 # region БОЛОТО
-SWAMP_SLOWDOWN_FACTOR = 0.5
+SWAMP_SLOWDOWN_FACTOR = 0.5   # скорость в болоте = PLAYER_SPEED * 0.5
 # endregion
 
 # region ПАЛИТРА: МИР
