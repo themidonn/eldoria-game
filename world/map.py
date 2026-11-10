@@ -365,7 +365,7 @@ class World:
         elif t == STAIRS_UP:
             self._draw_stairs_up(screen, sx, sy, r)
         elif t == MOUNTAIN:
-            self._draw_mountain(screen, sx, sy, r)
+            self._draw_mountain(screen, tx, ty, sx, sy, r)
         elif t == SWAMP:
             self._draw_swamp(screen, sx, sy, r)
 
@@ -431,16 +431,39 @@ class World:
             (sx + TILE // 2 + 6, sy + 18),
         ])
 
-    def _draw_mountain(self, screen, sx, sy, r):
-        """Горный тайл: серый камень с тёмными трещинами."""
+    def _draw_mountain(self, screen, tx, ty, sx, sy, r):
+        """Горный тайл: скала с тенью и бликом (без снега)."""
+        # 1. База — камень
         pygame.draw.rect(screen, COLOR_MOUNTAIN, r)
+
+        # 2. Тень справа — широкая (14 px) и тёмная
+        pygame.draw.polygon(screen, COLOR_MOUNTAIN_SHADOW, [
+            (sx + TILE - 14, sy),
+            (sx + TILE, sy),
+            (sx + TILE, sy + TILE),
+            (sx + TILE - 14, sy + TILE),
+        ])
+
+        # 3. Блик слева — светлый, тёплый (5 px)
+        pygame.draw.polygon(screen, COLOR_MOUNTAIN_LIGHT, [
+            (sx, sy),
+            (sx + 5, sy),
+            (sx + 5, sy + TILE),
+            (sx, sy + TILE),
+        ])
+
+        # 4. Трещины — детерминированно по (tx, ty)
+        rng = random.Random(tx * 1013 + ty * 7919)
+        for _ in range(2):
+            x1 = rng.randint(sx + 14, sx + TILE - 16)
+            y1 = rng.randint(sy + 12, sy + TILE - 20)
+            x2 = x1 + rng.randint(-6, 6)
+            y2 = y1 + rng.randint(6, 14)
+            pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
+                             (x1, y1), (x2, y2), 2)
+
+        # 5. Обводка
         pygame.draw.rect(screen, COLOR_MOUNTAIN_DARK, r, 2)
-        pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
-                         (sx + 10, sy + 12), (sx + 18, sy + 22), 2)
-        pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
-                         (sx + 18, sy + 22), (sx + 14, sy + 34), 2)
-        pygame.draw.line(screen, COLOR_MOUNTAIN_DARK,
-                         (sx + 26, sy + 8), (sx + 30, sy + 18), 2)
 
     def _draw_swamp(self, screen, sx, sy, r):
         """Болото: тёмно-зелёная вода с пузырями."""
