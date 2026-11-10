@@ -83,34 +83,44 @@ class Player:
 
         # --- Ввод (WASD + стрелки) ---
         dx = dy = 0
-        if keys[pygame.K_LEFT]  or keys[pygame.K_a]: dx -= 1
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: dx -= 1
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx += 1
-        if keys[pygame.K_UP]    or keys[pygame.K_w]: dy -= 1
-        if keys[pygame.K_DOWN]  or keys[pygame.K_s]: dy += 1
+        if keys[pygame.K_UP] or keys[pygame.K_w]: dy -= 1
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]: dy += 1
 
         if not (dx or dy):
             return
 
         # --- Нормализация (диагональ не быстрее прямой) ---
-        # Без неё sqrt(2) ≈ 1.41 — игрок по диагонали бегал бы
-        # на 41% быстрее, чем по прямой.
         length = (dx * dx + dy * dy) ** 0.5
         dx, dy = dx / length, dy / length
 
         # --- Направление взгляда: 4 стороны ---
-        # По большей оси; при равенстве (диагональ) — вертикаль.
-        # Это компромисс: 4 стороны проще для hitbox удара мечом,
-        # чем 8 (не нужно рисовать диагональные удары).
         if abs(dx) > abs(dy):
             self.direction = (1 if dx > 0 else -1, 0)
         else:
             self.direction = (0, 1 if dy > 0 else -1)
 
-        # --- Движение с коллизиями по осям ---
-        # X и Y проверяем отдельно — иначе игрок застревает в углах.
+        # --- Скорость с учётом болота ---
         # dt в миллисекундах, делим на 16.67 (кадр при 60 FPS) —
         # скорость одинаковая при любом FPS.
         speed = PLAYER_SPEED * (dt / 16.67)
+
+        # Проверяем тайл под ЦЕНТРОМ игрока: если болото — замедляем.
+        # Центр, а не угол — так игрок «проваливается» в болото,
+        # когда входит в него больше, чем наполовину. Это ощущается
+        # естественнее, чем «замедление при касании края».
+        # В подземелье SWAMP нет, поэтому проверка безопасна
+        # для обоих уровней (Dungeon.tiles тоже есть).
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        tx, ty = int(cx // TILE), int(cy // TILE)
+        if (0 <= ty < world.h and 0 <= tx < world.w
+                and world.tiles[ty][tx] == SWAMP):
+            speed *= SWAMP_SLOWDOWN_FACTOR
+
+        # --- Движение с коллизиями по осям ---
+        # X и Y проверяем отдельно — иначе игрок застревает в углах.
         if world.is_walkable_rect(self.x + dx * speed, self.y, self.w, self.h):
             self.x += dx * speed
         if world.is_walkable_rect(self.x, self.y + dy * speed, self.w, self.h):

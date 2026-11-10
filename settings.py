@@ -28,6 +28,10 @@ KEY_ZONE_X_MIN, KEY_ZONE_X_MAX = 75, 95
 KEY_ZONE_Y_MIN, KEY_ZONE_Y_MAX = 20, 45
 # endregion
 
+# region БОЛОТО
+SWAMP_SLOWDOWN_FACTOR = 0.5
+# endregion
+
 # region ПАЛИТРА: МИР
 COLOR_GRASS       = (86, 160, 70)
 COLOR_GRASS_DARK  = (72, 140, 60)
