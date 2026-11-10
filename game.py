@@ -232,6 +232,17 @@ class Game:
         self.intro_hint_last = self.font_hint_banner.render(
             "[Space] начать игру    [Esc] пропустить", True, (150, 150, 170)
         )
+        # --- Оверлей болота (кэш) ---
+        # Зелёный круг вокруг игрока, когда он в болоте.
+        # SRCALPHA + alpha в цвете — Pygbag-safe (не используем set_alpha).
+        size = PLAYER_SIZE + 16
+        self.swamp_overlay = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(
+            self.swamp_overlay,
+            (50, 80, 50, 110),   # тот же оттенок, что COLOR_SWAMP, но полупрозрачный
+            (size // 2, size // 2),
+            size // 2
+        )
 
     def _wrap_intro_page(self, text):
         """Рендерит страницу вступления: центрированные строки в Surface."""
@@ -1237,11 +1248,37 @@ class Game:
 
         for _, e in ents:
             if e is self.player:
+                # Оверлей болота рисуется ПОД игроком,
+                # чтобы мигание при invuln не оставляло «пустую ауру».
+                self._draw_swamp_effect()
                 self.player.draw(self.screen, self.camera)
             elif e is self.boss:
                 self.boss.draw(self.screen, self.camera)
             else:
                 e.draw(self.screen, self.camera)
+
+    def _draw_swamp_effect(self):
+        """Зелёный ореол вокруг игрока, если он стоит на тайле болота.
+
+        Проверяем тайл под ЦЕНТРОМ игрока — та же логика, что
+        в player.py (замедление скорости). Это гарантирует,
+        что «вязнет» и визуально, и по скорости одновременно.
+        """
+        cx = self.player.x + self.player.w / 2
+        cy = self.player.y + self.player.h / 2
+        tx, ty = int(cx // TILE), int(cy // TILE)
+
+        # Защита от выхода за границы карты
+        if not (0 <= ty < self.world.h and 0 <= tx < self.world.w):
+            return
+
+        if self.world.tiles[ty][tx] != SWAMP:
+            return
+
+        # Смещение: оверлей на 8 px больше игрока с каждой стороны
+        ox = int(self.player.x - self.camera.x) - 8
+        oy = int(self.player.y - self.camera.y) - 8
+        self.screen.blit(self.swamp_overlay, (ox, oy))
 
     def _draw_level_2(self):
         """Отрисовка сущностей уровня 2."""
