@@ -70,6 +70,13 @@ class Game:
     # входит в замок — чтобы не мешал в бою с боссом.
     CASTLE_X_MIN, CASTLE_X_MAX = 2, 13
     CASTLE_Y_MIN, CASTLE_Y_MAX = 2, 10
+    # --- Juice: hit-stop и slow-mo ---
+    # Hit-stop замораживает мир на несколько кадров при попадании — удар
+    # начинает «чувствоваться». Slow-mo включается только на смерти боссов.
+    HIT_STOP_MS = 60            # мс — заморозка на обычном попадании
+    HIT_STOP_DEATH_MS = 120     # мс — заморозка на убийстве босса
+    SLOWMO_SCALE = 0.3          # начальный time_scale при смерти босса
+    SLOWMO_LERP = 1.5           # скорость возврата time_scale к 1.0 (ед/сек)
     # endregion
 
     # region ИНИЦИАЛИЗАЦИЯ
@@ -324,6 +331,9 @@ class Game:
         self.quest_completed = False
         self.lore_reward_given = False
         self.banner_timer = 0
+        # --- Juice: hit-stop и slow-mo ---
+        self.hit_stop = 0
+        self.time_scale = 1.0
 
         # --- Вступление ---
         self.intro_page = 0
@@ -973,18 +983,43 @@ class Game:
 
     # region ЛОГИКА (UPDATE)
     def update(self, dt):
-        """Обновляет состояние, если игра не на паузе и не в диалоге."""
+        """
+        Обновляет состояние, если игра не на паузе и не в диалоге.
+
+        Слой juice:
+          - time_scale (slow-mo) плавно возвращается к 1.0 каждый кадр.
+          - При hit_stop > 0 игровой мир замирает, но time_scale
+            продолжает тикать (чтобы после заморозки не было рывка).
+        """
         if self.state != 'playing' or self.dialog.active:
             return
 
-        self.player.update(pygame.key.get_pressed(), dt, self.world)
+        # --- Slow-mo: плавный возврат time_scale к 1.0 ---
+        # Работает и во время hit-stop — bookkeeping, не влияет на картинку.
+        if self.time_scale < 1.0:
+            self.time_scale = min(
+                1.0, self.time_scale + dt * self.SLOWMO_LERP / 1000.0
+            )
+
+        # --- Hit-stop: заморозка мира ---
+        # handle_events() и draw() продолжают работать — только update мира
+        # пропускается. dt_eff здесь не нужен: таймер hit_stop идёт
+        # в реальном времени, а не в игровом.
+        if self.hit_stop > 0:
+            self.hit_stop = max(0, self.hit_stop - dt)
+            return
+
+        # --- Игровое время с учётом slow-mo ---
+        dt_eff = dt * self.time_scale
+
+        self.player.update(pygame.key.get_pressed(), dt_eff, self.world)
 
         if self.level == 1:
-            self._update_level_1(dt)
+            self._update_level_1(dt_eff)
         else:
-            self._update_level_2(dt)
+            self._update_level_2(dt_eff)
 
-        self._update_common(dt)
+        self._update_common(dt_eff)
 
     def _update_level_1(self, dt):
         """Обновление уровня 1: кристаллы, зелья, ключ, враги, босс."""
@@ -1047,6 +1082,11 @@ class Game:
                     e.x + e.w / 2, e.y - 10,
                     f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
+                # Hit-stop только на нелетальном ударе. На убийстве
+                # заморозка не нужна — смерть и так заметна.
+                if not e.dead:
+                    self.hit_stop = self.HIT_STOP_MS
+
             if not e.dead and e.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
                     self.camera.add_shake(5)
@@ -1075,6 +1115,8 @@ class Game:
                     self.boss.x + self.boss.w / 2, self.boss.y - 10,
                     f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
+                if not self.boss.dead:
+                    self.hit_stop = self.HIT_STOP_MS
             if not self.boss.dead and self.boss.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
                     self.camera.add_shake(5)
@@ -1086,7 +1128,7 @@ class Game:
         # --- Смерть босса → win через 1.5 сек ---
         if self.boss and self.boss.dead and self.boss_spawned:
             if self.win_delay == 0:
-                # Первый кадр после смерти — эффект
+                # Первый кадр после смерти — эффект + hit-stop + slow-mo
                 self.particles.spawn_burst(
                     self.boss.x + self.boss.w / 2,
                     self.boss.y + self.boss.h / 2,
@@ -1097,6 +1139,10 @@ class Game:
                     self.boss.x + self.boss.w / 2, self.boss.y - 10,
                     "МОРВЕЙН ПАЛ!", (255, 220, 100), duration=1500
                 ))
+                # Death hit-stop: длиннее обычного, чтобы удар «запомнился»,
+                # затем slow-mo. win_delay стартует после заморозки.
+                self.hit_stop = self.HIT_STOP_DEATH_MS
+                self.time_scale = self.SLOWMO_SCALE
                 self.win_delay = 1
             else:
                 self.win_delay += dt
@@ -1128,6 +1174,8 @@ class Game:
                     bat.x + bat.w / 2, bat.y - 10,
                     f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
+                if not bat.dead:
+                    self.hit_stop = self.HIT_STOP_MS
             if not bat.dead and bat.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
                     self.camera.add_shake(5)
@@ -1159,6 +1207,8 @@ class Game:
                     sk.x + sk.w / 2, sk.y - 10,
                     f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
+                if not sk.dead:
+                    self.hit_stop = self.HIT_STOP_MS
             if not sk.dead and sk.rect.colliderect(self.player.rect):
                 if self.player.take_damage(1):
                     self.camera.add_shake(5)
@@ -1190,6 +1240,8 @@ class Game:
                     self.dungeon_boss.y - 10,
                     f"-{self.player.damage}", (255, 255, 100), duration=600
                 ))
+                if not self.dungeon_boss.dead:
+                    self.hit_stop = self.HIT_STOP_MS
             if (not self.dungeon_boss.dead
                     and self.dungeon_boss.rect.colliderect(self.player.rect)):
                 if self.player.take_damage(1):
@@ -1210,6 +1262,10 @@ class Game:
                     self.dungeon_boss.y - 20,
                     "Король Скелетов пал!", (255, 220, 100), duration=2000
                 ))
+                # Death hit-stop + slow-mo — как у Морвейна,
+                # но без перехода в state='win' (босс подземелья).
+                self.hit_stop = self.HIT_STOP_DEATH_MS
+                self.time_scale = self.SLOWMO_SCALE
                 self.save_progress()
 
         # --- Снаряды босса ---
